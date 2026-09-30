@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, Brain, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleHelp, Code2, DoorOpen, Hand, Layers3, LockKeyhole, Minus, MousePointer2, Play, Plus, RotateCcw, Shield, Sparkles, Swords, Ticket, Trophy, Users, Volume2, X, Zap } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Brain, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleHelp, Code2, DoorOpen, Hand, Layers3, LockKeyhole, Minus, MousePointer2, Play, Plus, RotateCcw, Shield, Sparkles, Swords, Ticket, Trophy, Users, Volume2, X, Zap, ZoomIn, ZoomOut } from "lucide-react";
 import { DevCard } from "./DevCard";
 import { DEVELOPERS, PROJECTS, ROLE_CHANCES, getDeveloper, roleCanWork, type AreaType, type Developer, type Project } from "@/lib/game-data";
 
 type View = "home" | "deck" | "battle";
 type Owner = "player" | "enemy";
-type PlacedDev = { instanceId: string; devId: string; sanity: number; slot: number };
+type PlacedDev = { instanceId: string; devId: string; sanity: number; slot: number; position: number };
 type BoardSlot = { type: AreaType | null; developers: PlacedDev[] };
 type TaskProgress = { completed: boolean; marks: number };
 type ProjectState = Project & { claimedBy: Owner | null; completed: boolean; progress: number; tasksState: Record<string, TaskProgress> };
@@ -116,19 +116,22 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
   const [hand, setHand] = useState<string[]>(shuffledDeck.current.slice(0, 5));
   const [playerSlots, setPlayerSlots] = useState<BoardSlot[]>(emptySlots());
   const [enemySlots, setEnemySlots] = useState<BoardSlot[]>([
-    { type: "open", developers: [{ instanceId: "cpu-fan", devId: "fan", sanity: 10, slot: 0 }, { instanceId: "cpu-omar", devId: "omar", sanity: 10, slot: 0 }] },
-    { type: "cubicle", developers: [{ instanceId: "cpu-aiden", devId: "aiden", sanity: 6, slot: 1 }] },
-    { type: "open", developers: [{ instanceId: "cpu-wendy", devId: "wendy", sanity: 9, slot: 2 }] },
+    { type: "open", developers: [{ instanceId: "cpu-fan", devId: "fan", sanity: 10, slot: 0, position: 0 }, { instanceId: "cpu-omar", devId: "omar", sanity: 10, slot: 0, position: 1 }] },
+    { type: "cubicle", developers: [{ instanceId: "cpu-aiden", devId: "aiden", sanity: 6, slot: 1, position: 0 }] },
+    { type: "open", developers: [{ instanceId: "cpu-wendy", devId: "wendy", sanity: 9, slot: 2, position: 0 }] },
     { type: "cubicle", developers: [] }
   ]);
   const [selectedHand, setSelectedHand] = useState<number | null>(null);
-  const [areaPickerSlot, setAreaPickerSlot] = useState<number | null>(null);
+  const [selectedArea, setSelectedArea] = useState<AreaType | null>(null);
+  const [draggedArea, setDraggedArea] = useState<AreaType | null>(null);
+  const [lastAreaInstall, setLastAreaInstall] = useState<{ slot: number; key: number } | null>(null);
   const [projects, setProjects] = useState<ProjectState[]>(() => { const ps = freshProjects(); ps[1].claimedBy = "enemy"; return ps; });
   const [playerSanity, setPlayerSanity] = useState(30);
   const [enemySanity, setEnemySanity] = useState(30);
   const [turn, setTurn] = useState(1);
   const [cameraX, setCameraX] = useState(0);
   const [cameraTilt, setCameraTilt] = useState(52);
+  const [cameraZoom, setCameraZoom] = useState(1);
   const [plannerOpen, setPlannerOpen] = useState(false);
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [plan, setPlan] = useState<Record<string, PlannedAction>>({});
@@ -140,7 +143,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
   const [seqActive, setSeqActive] = useState<number | null>(null);
   const [highlight, setHighlight] = useState<ActionHighlight | null>(null);
   const [inspectedDeveloper, setInspectedDeveloper] = useState<InspectedDeveloper | null>(null);
-  const [announcement, setAnnouncement] = useState<StageAnnouncement | null>({ key: 0, title: "OFFICE SETUP", subtitle: "Choose a bay to configure your workspace", tone: "lime" });
+  const [announcement, setAnnouncement] = useState<StageAnnouncement | null>({ key: 0, title: "OFFICE SETUP", subtitle: "Build your workspace before the first sprint", tone: "lime" });
   const cameraHoldDelay = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cameraHoldInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const playerProject = projects.find((p) => p.claimedBy === "player" && !p.completed);
@@ -190,32 +193,41 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     if (phase !== "setup") return;
     const slot = playerSlots[slotIndex];
     setPlayerSlots((slots) => slots.map((s, i) => i === slotIndex ? { ...s, type: area } : s));
+    setLastAreaInstall({ slot: slotIndex, key: Date.now() });
     setEvent(`${area === "open" ? "Open Space" : "Cubicles"} ${slot.type ? "replaced" : "installed"} in Work Area ${slotIndex + 1}.`);
-    setEventTone("good"); setAreaPickerSlot(null);
+    setEventTone("good");
+  };
+
+  const startAreaDrag = (event: React.DragEvent<HTMLButtonElement>, area: AreaType) => {
+    event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.setData("application/x-dev-on-area", area);
+    event.dataTransfer.setData("text/plain", area);
+    setDraggedArea(area);
   };
 
   const finishSetup = () => {
     if (!setupReady) return;
-    setAreaPickerSlot(null);
+    setSelectedArea(null); setDraggedArea(null);
     setPhase("plan");
     setEvent("Office locked in. Deploy developers and choose your first project.");
     setEventTone("good");
     showAnnouncement("YOUR TURN", "Sprint 01 · Deploy your team and choose a project", "cyan");
   };
 
-  const deploy = (slotIndex: number) => {
+  const deploy = (slotIndex: number, position: number) => {
     if (selectedHand === null || phase !== "plan") return;
     const dev = getDeveloper(hand[selectedHand]);
     const slot = playerSlots[slotIndex];
     if (!slot.type) { setEvent("Install an office card in that bay before deploying a developer."); setEventTone("bad"); return; }
     const cap = slot.type === "open" ? 4 : 2;
     if (slot.developers.length >= cap) { setEvent("That work area is already full."); setEventTone("bad"); return; }
+    if (position < 0 || position >= cap || slot.developers.some((placedDev) => placedDev.position === position)) { setEvent("That desk is already occupied."); setEventTone("bad"); return; }
     if (dev.id === "aiden" && slot.type === "open") { setEvent("Aiden refuses the open space. Try a cubicle."); setEventTone("bad"); return; }
-    const instance: PlacedDev = { instanceId: `${dev.id}-${Date.now()}`, devId: dev.id, sanity: dev.sanity, slot: slotIndex };
+    const instance: PlacedDev = { instanceId: `${dev.id}-${Date.now()}`, devId: dev.id, sanity: dev.sanity, slot: slotIndex, position };
     setPlayerSlots((slots) => slots.map((s, i) => i === slotIndex ? { ...s, developers: [...s.developers, instance] } : s));
     setHand((h) => h.filter((_, i) => i !== selectedHand));
     setSelectedHand(null);
-    setEvent(`${dev.name} joined Work Area ${slotIndex + 1}.`); setEventTone("good");
+    setEvent(`${dev.name} took Desk ${position + 1} in Work Area ${slotIndex + 1}.`); setEventTone("good");
   };
 
   const claimProject = (id: string) => {
@@ -394,19 +406,19 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     setHand(shuffledDeck.current.slice(0, 5));
     setPlayerSlots(emptySlots());
     setEnemySlots([
-      { type: "open", developers: [{ instanceId: "cpu-fan", devId: "fan", sanity: 10, slot: 0 }, { instanceId: "cpu-omar", devId: "omar", sanity: 10, slot: 0 }] },
-      { type: "cubicle", developers: [{ instanceId: "cpu-aiden", devId: "aiden", sanity: 6, slot: 1 }] },
-      { type: "open", developers: [{ instanceId: "cpu-wendy", devId: "wendy", sanity: 9, slot: 2 }] },
+      { type: "open", developers: [{ instanceId: "cpu-fan", devId: "fan", sanity: 10, slot: 0, position: 0 }, { instanceId: "cpu-omar", devId: "omar", sanity: 10, slot: 0, position: 1 }] },
+      { type: "cubicle", developers: [{ instanceId: "cpu-aiden", devId: "aiden", sanity: 6, slot: 1, position: 0 }] },
+      { type: "open", developers: [{ instanceId: "cpu-wendy", devId: "wendy", sanity: 9, slot: 2, position: 0 }] },
       { type: "cubicle", developers: [] }
     ]);
-    setSelectedHand(null); setAreaPickerSlot(null);
+    setSelectedHand(null); setSelectedArea(null); setDraggedArea(null); setLastAreaInstall(null);
     const nextProjects = freshProjects();
     nextProjects[1].claimedBy = "enemy";
     setProjects(nextProjects);
-    setPlayerSanity(30); setEnemySanity(30); setTurn(1); setCameraX(0); setCameraTilt(52);
+    setPlayerSanity(30); setEnemySanity(30); setTurn(1); setCameraX(0); setCameraTilt(52); setCameraZoom(1);
     setPlannerOpen(false); setProjectModalOpen(false); setPlan({}); setPhase("setup"); setBrags([]);
     setWinner(null); setSeqActive(null); setHighlight(null); setInspectedDeveloper(null); setEventTone("neutral");
-    setAnnouncement({ key: Date.now(), title: "OFFICE SETUP", subtitle: "Choose a bay to configure your workspace", tone: "lime" });
+    setAnnouncement({ key: Date.now(), title: "OFFICE SETUP", subtitle: "Build your workspace before the first sprint", tone: "lime" });
     setEvent("Set up your office before the first sprint begins.");
   };
 
@@ -427,12 +439,12 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     </div>}
 
     <div className={`board-viewport ${phase === "setup" ? "setup-board" : ""}`}>
-      <div className="board-world" style={{ transform: `translateX(calc(-50% + ${cameraX}px)) translateY(${phase === "setup" ? -55 : -115}px) rotateX(${cameraTilt}deg) scale(${phase === "setup" ? .92 : .8})` }}>
+      <div className="board-world" style={{ transform: `translateX(calc(-50% + ${cameraX}px)) translateY(${phase === "setup" ? -82 : -115}px) rotateX(${cameraTilt}deg) scale(${(phase === "setup" ? .86 : .8) * cameraZoom})` }}>
         <div className="board-surface">
           <div className="lane-label enemy-lane">RIVAL OFFICE</div>
           <div className="slot-row enemy-row">{enemySlots.map((slot, i) => <BoardSlotView key={i} slot={slot} index={i} owner="enemy" highlight={highlight} onInspect={(placedDev) => setInspectedDeveloper({ devId: placedDev.devId, placed: placedDev, owner: "enemy" })} />)}</div>
           <div className="center-line"><span>PRODUCTION</span><i /><span>PRODUCTION</span></div>
-          <div className="slot-row player-row">{playerSlots.map((slot, i) => <BoardSlotView key={i} slot={slot} index={i} owner="player" selected={selectedHand !== null} setupMode={phase === "setup"} onDeploy={() => deploy(i)} onConfigure={() => setAreaPickerSlot(i)} onInspect={(placedDev) => setInspectedDeveloper({ devId: placedDev.devId, placed: placedDev, owner: "player" })} highlight={highlight} />)}</div>
+          <div className="slot-row player-row">{playerSlots.map((slot, i) => <BoardSlotView key={`${i}-${lastAreaInstall?.slot === i ? lastAreaInstall.key : 0}`} slot={slot} index={i} owner="player" selected={selectedHand !== null} setupMode={phase === "setup"} selectedArea={selectedArea} draggedArea={draggedArea} justPlaced={lastAreaInstall?.slot === i} onDeploy={(position) => deploy(i, position)} onConfigure={(area) => configureSlot(i, area)} onInspect={(placedDev) => setInspectedDeveloper({ devId: placedDev.devId, placed: placedDev, owner: "player" })} highlight={highlight} />)}</div>
           <div className="lane-label player-lane">YOUR OFFICE</div>
         </div>
       </div>
@@ -440,15 +452,18 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
         <button aria-label="Tilt board up" title="Hold to tilt up" {...holdProps(() => setCameraTilt((tilt) => clamp(tilt - 1.25, 38, 68)))}><ChevronUp /></button>
         <div><button aria-label="Pan board left" title="Hold to pan left" {...holdProps(() => setCameraX((x) => clamp(x - 20, -380, 380)))}><ChevronLeft /></button><span><MousePointer2 size={13} /><b>{Math.round(cameraTilt)}°</b><small>HOLD TO MOVE</small></span><button aria-label="Pan board right" title="Hold to pan right" {...holdProps(() => setCameraX((x) => clamp(x + 20, -380, 380)))}><ChevronRight /></button></div>
         <button aria-label="Tilt board down" title="Hold to tilt down" {...holdProps(() => setCameraTilt((tilt) => clamp(tilt + 1.25, 38, 68)))}><ChevronDown /></button>
+        <div className="zoom-controls"><button aria-label="Zoom board out" title="Hold to zoom out" {...holdProps(() => setCameraZoom((zoom) => clamp(zoom - .025, .72, 1.3)))}><ZoomOut /></button><span><b>{Math.round(cameraZoom * 100)}%</b><small>ZOOM</small></span><button aria-label="Zoom board in" title="Hold to zoom in" {...holdProps(() => setCameraZoom((zoom) => clamp(zoom + .025, .72, 1.3)))}><ZoomIn /></button></div>
       </div>
       {announcement && <div key={announcement.key} className={`stage-announcement ${announcement.tone}`}><small>{phase === "setup" ? "PRE-BATTLE" : "ACTIVE PLAYER"}</small><b>{announcement.title}</b><span>{announcement.subtitle}</span></div>}
-      {phase === "setup" && <div className="setup-ready-panel"><div><span>OFFICE LAYOUT</span><b>{configuredAreas}<small>/4</small></b><p>{setupReady ? "Every bay is configured." : "Click a highlighted bay to choose its work area."}</p></div><button onClick={finishSetup} disabled={!setupReady}><Check size={18} /><span><b>READY</b><small>{setupReady ? "Begin Sprint 01" : `${4 - configuredAreas} bays remaining`}</small></span></button></div>}
+      {phase === "setup" && !announcement && configuredAreas === 0 && <div className="setup-drag-hint"><b>PLACE YOUR OFFICE SPACES</b><span>Drag space cards into slots</span></div>}
+      {phase === "setup" && !announcement && <div className="setup-card-tray" aria-label="Reusable office space cards"><OfficeCard area="open" selected={selectedArea === "open"} dragging={draggedArea === "open"} onClick={() => setSelectedArea(selectedArea === "open" ? null : "open")} onDragStart={(event) => startAreaDrag(event, "open")} onDragEnd={() => setDraggedArea(null)} /><OfficeCard area="cubicle" selected={selectedArea === "cubicle"} dragging={draggedArea === "cubicle"} onClick={() => setSelectedArea(selectedArea === "cubicle" ? null : "cubicle")} onDragStart={(event) => startAreaDrag(event, "cubicle")} onDragEnd={() => setDraggedArea(null)} /></div>}
+      {phase === "setup" && <div className="setup-ready-panel"><div><span>OFFICE LAYOUT</span><b>{configuredAreas}<small>/4</small></b><p>{setupReady ? "Every bay is configured." : selectedArea ? `Click a bay to place ${selectedArea === "open" ? "Open Space" : "Cubicles"}.` : "Drag a reusable space card into each bay."}</p></div><button onClick={finishSetup} disabled={!setupReady}><Check size={18} /><span><b>READY</b><small>{setupReady ? "Begin Sprint 01" : `${4 - configuredAreas} bays remaining`}</small></span></button></div>}
       {phase === "resolving" && <div className={`event-banner ${eventTone}`}><small>SEQUENCE {seqActive}/8</small><b>{event}</b></div>}
     </div>
 
     {phase !== "setup" && <div className="battle-dock">
         <DrawPile remaining={deckRemaining} total={shuffledDeck.current.length} />
-        <div className="hand-zone"><div className="hand-label"><span><Hand size={15} /> DEVELOPER HAND</span><small>{selectedHand === null ? "Click a card to inspect and deploy" : "Choose a highlighted work area"}</small></div><div className="hand-cards">{hand.map((id, i) => <DevCard key={`${id}-${i}`} dev={getDeveloper(id)} compact selected={selectedHand === i} onClick={() => setInspectedDeveloper({ devId: id, handIndex: i })} />)}{Array.from({ length: Math.max(0, 5 - hand.length) }).map((_, i) => <div className="empty-hand" key={i}><Code2 /></div>)}</div></div>
+        <div className="hand-zone"><div className="hand-label"><span><Hand size={15} /> DEVELOPER HAND</span><small>{selectedHand === null ? "Click a card to inspect and deploy" : "Choose a highlighted desk"}</small></div><div className="hand-cards">{hand.map((id, i) => <DevCard key={`${id}-${i}`} dev={getDeveloper(id)} compact selected={selectedHand === i} onClick={() => setInspectedDeveloper({ devId: id, handIndex: i })} />)}{Array.from({ length: Math.max(0, 5 - hand.length) }).map((_, i) => <div className="empty-hand" key={i}><Code2 /></div>)}</div></div>
         <div className="battle-actions">
           {phase === "plan" && <button className="plan-button" onClick={() => setPlannerOpen(true)}><Ticket size={21} /><span><b>PLAN SPRINT</b><small>Assign up to 8 sequences</small></span><ChevronRight /></button>}
           {phase === "resolving" && <div className="resolving-button"><span className="spinner" /><div><b>SPRINT IN PROGRESS</b><small>Actions resolve in sequence</small></div></div>}
@@ -458,21 +473,18 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
 
     {plannerOpen && <Planner developers={placed} project={playerProject} plan={plan} setPlan={setPlan} onClose={() => setPlannerOpen(false)} onRun={resolveTurn} />}
     {projectModalOpen && <ProjectPicker projects={projects} activeProject={playerProject} onClaim={claimProject} onAbandon={abandon} onClose={() => setProjectModalOpen(false)} canEdit={phase === "plan"} />}
-    {areaPickerSlot !== null && <AreaPicker slotIndex={areaPickerSlot} current={playerSlots[areaPickerSlot].type} onSelect={(area) => configureSlot(areaPickerSlot, area)} onClose={() => setAreaPickerSlot(null)} />}
     {inspectedDeveloper && <DeveloperDetails inspected={inspectedDeveloper} selected={inspectedDeveloper.handIndex !== undefined && selectedHand === inspectedDeveloper.handIndex} onClose={() => setInspectedDeveloper(null)} onSelect={inspectedDeveloper.handIndex === undefined || phase !== "plan" ? undefined : () => { setSelectedHand(selectedHand === inspectedDeveloper.handIndex ? null : inspectedDeveloper.handIndex!); setInspectedDeveloper(null); }} />}
     {phase === "gameover" && <div className="gameover-overlay"><div className={`gameover-card ${winner}`}><div className="burst" /><Trophy size={54} /><span>{winner === "player" ? "SHIP HAPPENS" : "PROD IS DOWN"}</span><h2>{winner === "player" ? "You shipped it." : "You burned out."}</h2><p>{winner === "player" ? "The rival lead has no sanity left. Take the win." : "Your sanity hit zero. The backlog wins this round."}</p><div><button className="primary-cta small" onClick={resetBattle}><RotateCcw size={17} /> Rematch</button><button className="secondary-cta" onClick={onExit}>Main menu</button></div></div></div>}
   </main>;
 }
 
-function AreaPicker({ slotIndex, current, onSelect, onClose }: { slotIndex: number; current: AreaType | null; onSelect: (area: AreaType) => void; onClose: () => void }) {
-  return <div className="modal-backdrop area-picker-backdrop" onClick={onClose}><section className="area-picker-modal" onClick={(event) => event.stopPropagation()}>
-    <header><div><span className="eyebrow-small">WORK AREA {String(slotIndex + 1).padStart(2, "0")}</span><h2>Choose this bay's layout</h2><p>You can reopen this bay and change it until you press Ready.</p></div><button onClick={onClose} aria-label="Close work area picker"><X size={18} /></button></header>
-    <div className="area-picker-options">
-      <button className={current === "open" ? "selected open" : "open"} onClick={() => onSelect("open")}><img src="/areas/open-space.png" alt="Open Space" /><span><i><DoorOpen size={18} /></i><span><b>Open Space</b><small>COLLABORATIVE · 4 DEVELOPERS</small></span>{current === "open" && <Check size={18} />}</span><p>Enables coworker effects, but developers can be directly taunted from the opposing bay.</p></button>
-      <button className={current === "cubicle" ? "selected cubicle" : "cubicle"} onClick={() => onSelect("cubicle")}><img src="/areas/cubicles.png" alt="Cubicles" /><span><i><LockKeyhole size={18} /></i><span><b>Cubicles</b><small>PROTECTED · 2 DEVELOPERS</small></span>{current === "cubicle" && <Check size={18} />}</span><p>Blocks direct sanity attacks. Taunts aimed here hit the player instead.</p></button>
-    </div>
-    <footer><span><MousePointer2 size={14} /> Select a layout to install it immediately</span><button className="secondary-cta" onClick={onClose}>Cancel</button></footer>
-  </section></div>;
+function OfficeCard({ area, selected, dragging, onClick, onDragStart, onDragEnd }: { area: AreaType; selected: boolean; dragging: boolean; onClick: () => void; onDragStart: (event: React.DragEvent<HTMLButtonElement>) => void; onDragEnd: () => void }) {
+  const open = area === "open";
+  return <button type="button" draggable aria-label={`Drag ${open ? "Open Space" : "Cubicles"} card`} className={`setup-space-card ${area} ${selected ? "selected" : ""} ${dragging ? "dragging" : ""}`} onClick={onClick} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+    <img src={open ? "/areas/open-space.png" : "/areas/cubicles.png"} alt="" draggable={false} />
+    <span><i>{open ? <DoorOpen size={14} /> : <LockKeyhole size={14} />}</i><span><b>{open ? "OPEN SPACE" : "CUBICLES"}</b><small>{open ? "4 DESKS · COLLAB" : "2 DESKS · PROTECTED"}</small></span></span>
+    <em>DRAG TO PLACE</em>
+  </button>;
 }
 
 function DrawPile({ remaining, total }: { remaining: number; total: number }) {
@@ -500,7 +512,7 @@ function DeveloperDetails({ inspected, selected, onClose, onSelect }: { inspecte
         <div><Code2 size={18} /><span><b>{workTypes}</b><small>WORK COMPATIBILITY</small></span></div>
       </div>
       <div className="detail-trait"><Sparkles size={20} /><span><small>SPECIAL TRAIT</small><b>{dev.traitLabel}</b><p>{dev.trait}</p></span></div>
-      {inspected.owner && <div className={`detail-owner ${inspected.owner}`}><span>{inspected.owner === "enemy" ? "RIVAL TEAM" : "YOUR TEAM"}</span><small>Work Area {(inspected.placed?.slot ?? 0) + 1}</small></div>}
+      {inspected.owner && <div className={`detail-owner ${inspected.owner}`}><span>{inspected.owner === "enemy" ? "RIVAL TEAM" : "YOUR TEAM"}</span><small>Work Area {(inspected.placed?.slot ?? 0) + 1} · Desk {(inspected.placed?.position ?? 0) + 1}</small></div>}
       {onSelect && <button className={`primary-cta detail-select ${selected ? "selected" : ""}`} onClick={onSelect}>{selected ? <Minus size={17} /> : <MousePointer2 size={17} />} {selected ? "Cancel deployment" : "Select for deployment"}</button>}
     </div>
   </section></div>;
@@ -537,13 +549,25 @@ function ProjectPicker({ projects, activeProject, onClaim, onAbandon, onClose, c
   </section></div>;
 }
 
-function BoardSlotView({ slot, index, owner, selected, setupMode = false, onDeploy, onConfigure, onInspect, highlight }: { slot: BoardSlot; index: number; owner: Owner; selected?: boolean; setupMode?: boolean; onDeploy?: () => void; onConfigure?: () => void; onInspect?: (placed: PlacedDev) => void; highlight?: ActionHighlight | null }) {
+function BoardSlotView({ slot, index, owner, selected, setupMode = false, selectedArea, draggedArea, justPlaced = false, onDeploy, onConfigure, onInspect, highlight }: { slot: BoardSlot; index: number; owner: Owner; selected?: boolean; setupMode?: boolean; selectedArea?: AreaType | null; draggedArea?: AreaType | null; justPlaced?: boolean; onDeploy?: (position: number) => void; onConfigure?: (area: AreaType) => void; onInspect?: (placed: PlacedDev) => void; highlight?: ActionHighlight | null }) {
+  const [dragOver, setDragOver] = useState(false);
   const cap = slot.type === "open" ? 4 : slot.type === "cubicle" ? 2 : 0;
-  const readyForArea = setupMode;
   const readyForDev = !!slot.type && !!selected && slot.developers.length < cap;
-  return <div className={`board-slot ${owner} ${slot.type ?? "unconfigured"} ${readyForArea ? "setup-available" : ""} ${readyForDev ? "drop-ready" : ""}`} onClick={readyForArea ? onConfigure : readyForDev ? onDeploy : undefined}>
-    <div className="slot-header"><span>{slot.type === "open" ? <DoorOpen size={13} /> : slot.type === "cubicle" ? <LockKeyhole size={13} /> : <Layers3 size={13} />}{slot.type === "open" ? "OPEN SPACE" : slot.type === "cubicle" ? "CUBICLES" : "EMPTY BAY"}</span>{setupMode && slot.type && <em className="setup-edit">CHANGE</em>}<b>{slot.type ? `${slot.developers.length}/${cap}` : "—"}</b></div>
-    {!slot.type ? <div className="unconfigured-slot"><div className="bay-grid" /><MousePointer2 size={22} /><b>CLICK TO CONFIGURE</b><small>Choose Open Space or Cubicles</small></div> : <div className="slot-grid">{slot.developers.map((placed) => { const dev = getDeveloper(placed.devId); const targeted = highlight?.targetId === placed.instanceId; const acting = highlight?.actorId === placed.instanceId; return <button type="button" aria-label={`Inspect ${dev.name}`} className={`board-card ${targeted ? "targeted" : ""} ${acting ? `acting ${highlight?.kind}` : ""}`} onClick={(event) => { event.stopPropagation(); onInspect?.(placed); }} key={placed.instanceId} style={{ "--accent": dev.accent } as React.CSSProperties}>{targeted && <span className="target-marker">!</span>}{acting && <span className="action-marker">{highlight?.kind === "taunt" ? "💬" : "</>"}</span>}<span className="board-card-face"><img src={dev.art} alt={dev.name} /><span className="board-card-meta"><b>{dev.name}</b><span><Brain size={10} /> {placed.sanity}</span></span></span></button>; })}{Array.from({ length: Math.max(0, cap - slot.developers.length) }).map((_, i) => <div className="slot-empty" key={i}><Plus size={13} /></div>)}{slot.type === "cubicle" && Array.from({ length: 2 }).map((_, i) => <div className="slot-blocked" key={`blocked-${i}`}><LockKeyhole size={12} /></div>)}</div>}
+  const placeSelectedArea = () => { if (setupMode && selectedArea) onConfigure?.(selectedArea); };
+  const receiveArea = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault(); setDragOver(false);
+    const area = event.dataTransfer.getData("application/x-dev-on-area") || event.dataTransfer.getData("text/plain");
+    if (area === "open" || area === "cubicle") onConfigure?.(area);
+  };
+  return <div className={`board-slot ${owner} ${slot.type ?? "unconfigured"} ${setupMode ? "setup-available" : ""} ${draggedArea ? "area-drag-target" : ""} ${dragOver ? "drag-over" : ""} ${justPlaced ? "area-just-placed" : ""}`} onClick={placeSelectedArea} onDragEnter={setupMode ? (event) => { event.preventDefault(); setDragOver(true); } : undefined} onDragOver={setupMode ? (event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; } : undefined} onDragLeave={setupMode ? (event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragOver(false); } : undefined} onDrop={setupMode ? receiveArea : undefined}>
+    <div className="slot-header"><span>{slot.type === "open" ? <DoorOpen size={13} /> : slot.type === "cubicle" ? <LockKeyhole size={13} /> : <Layers3 size={13} />}{slot.type === "open" ? "OPEN SPACE" : slot.type === "cubicle" ? "CUBICLES" : "EMPTY BAY"}</span>{setupMode && slot.type && <em className="setup-edit">REPLACE</em>}<b>{slot.type ? `${slot.developers.length}/${cap}` : "—"}</b></div>
+    {!slot.type ? <div className="unconfigured-slot"><div className="bay-grid" /><MousePointer2 size={22} /><b>{dragOver ? "RELEASE TO INSTALL" : selectedArea ? "CLICK TO INSTALL" : "DROP OFFICE CARD"}</b><small>{draggedArea ? (draggedArea === "open" ? "Open Space · 4 desks" : "Cubicles · 2 desks") : "Open Space or Cubicles"}</small></div> : <div className="slot-grid">{Array.from({ length: 4 }).map((_, position) => {
+      const placedDev = slot.developers.find((developer) => developer.position === position);
+      if (placedDev) { const dev = getDeveloper(placedDev.devId); const targeted = highlight?.targetId === placedDev.instanceId; const acting = highlight?.actorId === placedDev.instanceId; return <button type="button" aria-label={`Inspect ${dev.name} at desk ${position + 1}`} className={`board-card ${targeted ? "targeted" : ""} ${acting ? `acting ${highlight?.kind}` : ""}`} onClick={(event) => { event.stopPropagation(); onInspect?.(placedDev); }} key={placedDev.instanceId} style={{ "--accent": dev.accent } as React.CSSProperties}>{targeted && <span className="target-marker">!</span>}{acting && <span className="action-marker">{highlight?.kind === "taunt" ? "💬" : "</>"}</span>}<span className="board-card-face"><img src={dev.art} alt={dev.name} /><span className="board-card-meta"><b>{dev.name}</b><span><Brain size={10} /> {placedDev.sanity}</span></span></span></button>; }
+      if (position >= cap) return <div className="slot-blocked" key={`blocked-${position}`}><LockKeyhole size={12} /></div>;
+      if (owner === "enemy") return <div className="slot-empty" key={`empty-${position}`}><Plus size={13} /></div>;
+      return <button type="button" aria-label={`Deploy selected developer to work area ${index + 1}, desk ${position + 1}`} className={`slot-empty ${readyForDev ? "deploy-target" : ""}`} disabled={!readyForDev} onClick={(event) => { event.stopPropagation(); onDeploy?.(position); }} key={`empty-${position}`}><Plus size={13} /><small>{readyForDev ? `DESK ${position + 1}` : ""}</small></button>;
+    })}</div>}
     <div className="slot-number">0{index + 1}</div>
   </div>;
 }
