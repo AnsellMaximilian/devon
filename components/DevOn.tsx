@@ -124,6 +124,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
   const [selectedHand, setSelectedHand] = useState<number | null>(null);
   const [selectedArea, setSelectedArea] = useState<AreaType | null>(null);
   const [draggedArea, setDraggedArea] = useState<AreaType | null>(null);
+  const [dragPointer, setDragPointer] = useState<{ x: number; y: number } | null>(null);
   const [lastAreaInstall, setLastAreaInstall] = useState<{ slot: number; key: number } | null>(null);
   const [projects, setProjects] = useState<ProjectState[]>(() => { const ps = freshProjects(); ps[1].claimedBy = "enemy"; return ps; });
   const [playerSanity, setPlayerSanity] = useState(30);
@@ -202,12 +203,23 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     event.dataTransfer.effectAllowed = "copy";
     event.dataTransfer.setData("application/x-dev-on-area", area);
     event.dataTransfer.setData("text/plain", area);
+    const blankPreview = document.createElement("canvas");
+    blankPreview.width = 1; blankPreview.height = 1;
+    event.dataTransfer.setDragImage(blankPreview, 0, 0);
+    const bounds = event.currentTarget.getBoundingClientRect();
+    setDragPointer({ x: event.clientX || bounds.left + bounds.width / 2, y: event.clientY || bounds.top + bounds.height / 2 });
     setDraggedArea(area);
   };
 
+  const moveAreaDrag = (event: React.DragEvent<HTMLButtonElement>) => {
+    if (event.clientX || event.clientY) setDragPointer({ x: event.clientX, y: event.clientY });
+  };
+
+  const endAreaDrag = () => { setDraggedArea(null); setDragPointer(null); };
+
   const finishSetup = () => {
     if (!setupReady) return;
-    setSelectedArea(null); setDraggedArea(null);
+    setSelectedArea(null); endAreaDrag();
     setPhase("plan");
     setEvent("Office locked in. Deploy developers and choose your first project.");
     setEventTone("good");
@@ -411,7 +423,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       { type: "open", developers: [{ instanceId: "cpu-wendy", devId: "wendy", sanity: 9, slot: 2, position: 0 }] },
       { type: "cubicle", developers: [] }
     ]);
-    setSelectedHand(null); setSelectedArea(null); setDraggedArea(null); setLastAreaInstall(null);
+    setSelectedHand(null); setSelectedArea(null); endAreaDrag(); setLastAreaInstall(null);
     const nextProjects = freshProjects();
     nextProjects[1].claimedBy = "enemy";
     setProjects(nextProjects);
@@ -456,7 +468,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       </div>
       {announcement && <div key={announcement.key} className={`stage-announcement ${announcement.tone}`}><small>{phase === "setup" ? "PRE-BATTLE" : "ACTIVE PLAYER"}</small><b>{announcement.title}</b><span>{announcement.subtitle}</span></div>}
       {phase === "setup" && !announcement && configuredAreas === 0 && <div className="setup-drag-hint"><b>PLACE YOUR OFFICE SPACES</b><span>Drag space cards into slots</span></div>}
-      {phase === "setup" && !announcement && <div className="setup-card-tray" aria-label="Reusable office space cards"><OfficeCard area="open" selected={selectedArea === "open"} dragging={draggedArea === "open"} onClick={() => setSelectedArea(selectedArea === "open" ? null : "open")} onDragStart={(event) => startAreaDrag(event, "open")} onDragEnd={() => setDraggedArea(null)} /><OfficeCard area="cubicle" selected={selectedArea === "cubicle"} dragging={draggedArea === "cubicle"} onClick={() => setSelectedArea(selectedArea === "cubicle" ? null : "cubicle")} onDragStart={(event) => startAreaDrag(event, "cubicle")} onDragEnd={() => setDraggedArea(null)} /></div>}
+      {phase === "setup" && !announcement && <div className="setup-card-tray" aria-label="Reusable office space cards"><OfficeCard area="open" selected={selectedArea === "open"} dragging={draggedArea === "open"} onClick={() => setSelectedArea(selectedArea === "open" ? null : "open")} onDragStart={(event) => startAreaDrag(event, "open")} onDrag={moveAreaDrag} onDragEnd={endAreaDrag} /><OfficeCard area="cubicle" selected={selectedArea === "cubicle"} dragging={draggedArea === "cubicle"} onClick={() => setSelectedArea(selectedArea === "cubicle" ? null : "cubicle")} onDragStart={(event) => startAreaDrag(event, "cubicle")} onDrag={moveAreaDrag} onDragEnd={endAreaDrag} /></div>}
       {phase === "setup" && <div className="setup-ready-panel"><div><span>OFFICE LAYOUT</span><b>{configuredAreas}<small>/4</small></b><p>{setupReady ? "Every bay is configured." : selectedArea ? `Click a bay to place ${selectedArea === "open" ? "Open Space" : "Cubicles"}.` : "Drag a reusable space card into each bay."}</p></div><button onClick={finishSetup} disabled={!setupReady}><Check size={18} /><span><b>READY</b><small>{setupReady ? "Begin Sprint 01" : `${4 - configuredAreas} bays remaining`}</small></span></button></div>}
       {phase === "resolving" && <div className={`event-banner ${eventTone}`}><small>SEQUENCE {seqActive}/8</small><b>{event}</b></div>}
     </div>
@@ -471,6 +483,8 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
         </div>
     </div>}
 
+    {phase === "setup" && draggedArea && dragPointer && <div aria-hidden="true" className={`setup-drag-ghost ${draggedArea}`} style={{ left: dragPointer.x, top: dragPointer.y }}><img src={draggedArea === "open" ? "/areas/open-space.png" : "/areas/cubicles.png"} alt="" /><span>{draggedArea === "open" ? <DoorOpen size={15} /> : <LockKeyhole size={15} />}<b>{draggedArea === "open" ? "OPEN SPACE" : "CUBICLES"}</b></span><em>DROP TO INSTALL</em></div>}
+
     {plannerOpen && <Planner developers={placed} project={playerProject} plan={plan} setPlan={setPlan} onClose={() => setPlannerOpen(false)} onRun={resolveTurn} />}
     {projectModalOpen && <ProjectPicker projects={projects} activeProject={playerProject} onClaim={claimProject} onAbandon={abandon} onClose={() => setProjectModalOpen(false)} canEdit={phase === "plan"} />}
     {inspectedDeveloper && <DeveloperDetails inspected={inspectedDeveloper} selected={inspectedDeveloper.handIndex !== undefined && selectedHand === inspectedDeveloper.handIndex} onClose={() => setInspectedDeveloper(null)} onSelect={inspectedDeveloper.handIndex === undefined || phase !== "plan" ? undefined : () => { setSelectedHand(selectedHand === inspectedDeveloper.handIndex ? null : inspectedDeveloper.handIndex!); setInspectedDeveloper(null); }} />}
@@ -478,9 +492,9 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
   </main>;
 }
 
-function OfficeCard({ area, selected, dragging, onClick, onDragStart, onDragEnd }: { area: AreaType; selected: boolean; dragging: boolean; onClick: () => void; onDragStart: (event: React.DragEvent<HTMLButtonElement>) => void; onDragEnd: () => void }) {
+function OfficeCard({ area, selected, dragging, onClick, onDragStart, onDrag, onDragEnd }: { area: AreaType; selected: boolean; dragging: boolean; onClick: () => void; onDragStart: (event: React.DragEvent<HTMLButtonElement>) => void; onDrag: (event: React.DragEvent<HTMLButtonElement>) => void; onDragEnd: () => void }) {
   const open = area === "open";
-  return <button type="button" draggable aria-label={`Drag ${open ? "Open Space" : "Cubicles"} card`} className={`setup-space-card ${area} ${selected ? "selected" : ""} ${dragging ? "dragging" : ""}`} onClick={onClick} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+  return <button type="button" draggable aria-label={`Drag ${open ? "Open Space" : "Cubicles"} card`} className={`setup-space-card ${area} ${selected ? "selected" : ""} ${dragging ? "dragging" : ""}`} onClick={onClick} onDragStart={onDragStart} onDrag={onDrag} onDragEnd={onDragEnd}>
     <img src={open ? "/areas/open-space.png" : "/areas/cubicles.png"} alt="" draggable={false} />
     <span><i>{open ? <DoorOpen size={14} /> : <LockKeyhole size={14} />}</i><span><b>{open ? "OPEN SPACE" : "CUBICLES"}</b><small>{open ? "4 DESKS · COLLAB" : "2 DESKS · PROTECTED"}</small></span></span>
     <em>DRAG TO PLACE</em>
@@ -551,15 +565,17 @@ function ProjectPicker({ projects, activeProject, onClaim, onAbandon, onClose, c
 
 function BoardSlotView({ slot, index, owner, selected, setupMode = false, selectedArea, draggedArea, justPlaced = false, onDeploy, onConfigure, onInspect, highlight }: { slot: BoardSlot; index: number; owner: Owner; selected?: boolean; setupMode?: boolean; selectedArea?: AreaType | null; draggedArea?: AreaType | null; justPlaced?: boolean; onDeploy?: (position: number) => void; onConfigure?: (area: AreaType) => void; onInspect?: (placed: PlacedDev) => void; highlight?: ActionHighlight | null }) {
   const [dragOver, setDragOver] = useState(false);
+  const dragDepth = useRef(0);
+  useEffect(() => { if (!draggedArea) { dragDepth.current = 0; setDragOver(false); } }, [draggedArea]);
   const cap = slot.type === "open" ? 4 : slot.type === "cubicle" ? 2 : 0;
   const readyForDev = !!slot.type && !!selected && slot.developers.length < cap;
   const placeSelectedArea = () => { if (setupMode && selectedArea) onConfigure?.(selectedArea); };
   const receiveArea = (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault(); setDragOver(false);
+    event.preventDefault(); dragDepth.current = 0; setDragOver(false);
     const area = event.dataTransfer.getData("application/x-dev-on-area") || event.dataTransfer.getData("text/plain");
     if (area === "open" || area === "cubicle") onConfigure?.(area);
   };
-  return <div className={`board-slot ${owner} ${slot.type ?? "unconfigured"} ${setupMode ? "setup-available" : ""} ${draggedArea ? "area-drag-target" : ""} ${dragOver ? "drag-over" : ""} ${justPlaced ? "area-just-placed" : ""}`} onClick={placeSelectedArea} onDragEnter={setupMode ? (event) => { event.preventDefault(); setDragOver(true); } : undefined} onDragOver={setupMode ? (event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; } : undefined} onDragLeave={setupMode ? (event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragOver(false); } : undefined} onDrop={setupMode ? receiveArea : undefined}>
+  return <div data-drag-label={draggedArea ? `DROP ${draggedArea === "open" ? "OPEN SPACE" : "CUBICLES"} HERE` : undefined} className={`board-slot ${owner} ${slot.type ?? "unconfigured"} ${setupMode ? "setup-available" : ""} ${draggedArea ? "area-drag-target" : ""} ${dragOver ? "drag-over" : ""} ${justPlaced ? "area-just-placed" : ""}`} onClick={placeSelectedArea} onDragEnter={setupMode ? (event) => { event.preventDefault(); dragDepth.current += 1; setDragOver(true); } : undefined} onDragOver={setupMode ? (event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; } : undefined} onDragLeave={setupMode ? () => { dragDepth.current = Math.max(0, dragDepth.current - 1); if (dragDepth.current === 0) setDragOver(false); } : undefined} onDrop={setupMode ? receiveArea : undefined}>
     <div className="slot-header"><span>{slot.type === "open" ? <DoorOpen size={13} /> : slot.type === "cubicle" ? <LockKeyhole size={13} /> : <Layers3 size={13} />}{slot.type === "open" ? "OPEN SPACE" : slot.type === "cubicle" ? "CUBICLES" : "EMPTY BAY"}</span>{setupMode && slot.type && <em className="setup-edit">REPLACE</em>}<b>{slot.type ? `${slot.developers.length}/${cap}` : "—"}</b></div>
     {!slot.type ? <div className="unconfigured-slot"><div className="bay-grid" /><MousePointer2 size={22} /><b>{dragOver ? "RELEASE TO INSTALL" : selectedArea ? "CLICK TO INSTALL" : "DROP OFFICE CARD"}</b><small>{draggedArea ? (draggedArea === "open" ? "Open Space · 4 desks" : "Cubicles · 2 desks") : "Open Space or Cubicles"}</small></div> : <div className="slot-grid">{Array.from({ length: 4 }).map((_, position) => {
       const placedDev = slot.developers.find((developer) => developer.position === position);
