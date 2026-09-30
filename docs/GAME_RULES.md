@@ -10,11 +10,15 @@ Each lead starts at 30 sanity. Reduce the rival lead to 0 to win. A developer wh
 
 Each side has four opposing work-area slots. An open space holds four developers and enables coworker traits, but developers there may be taunted by developers in the directly opposing slot. A cubicle holds two developers, disables collaborative traits, and protects developer sanity: taunt damage is redirected to the player.
 
+The player's four slots begin unconfigured. Before planning the first sprint, choose an illustrated Open Space or Cubicle card from the office kit and place one into each slot. This makes capacity, protection, and collaboration an explicit deck-building decision instead of silently pre-filling the board. The computer configures its own office mix.
+
 At battle start, the player reveals five developers from their deck. At the beginning of later turns, they draw one up to a hand limit of five. Chad's Nepotism can increase this to two when he is in open space. Aiden can only enter cubicles.
 
 ## Projects and the shared backlog
 
 Projects are placed into a shared backlog. Claiming one locks the player to it and prevents the opponent from claiming it. A player may abandon an unfinished project, reset its progress, return it to the backlog, and lose 3 sanity.
+
+Only the currently claimed project remains on the battle HUD. The shared backlog opens in a dedicated project picker: inspect every task, task type, MVP value, dependency, and Brag reward, then explicitly confirm the claim. Abandoning also requires a separate confirmation.
 
 Every project task is Frontend, Backend, or Mobile. Completing it contributes the printed points to the project's MVP meter. Reaching the MVP threshold completes the project and banks a Brag whose damage is printed on that project. Only one Brag can be used each turn; additional Brags remain banked. Work actions after the project completes are moot.
 
@@ -41,11 +45,11 @@ A turn contains eight numbered sequences. Each deployed developer gets one actio
 
 Available actions are:
 
-- **Work:** attempt one compatible, incomplete task.
+- **Work:** explicitly choose one compatible, incomplete project task to attempt. The picker previews its current success chance.
 - **Taunt:** attack a developer in the directly opposing open-space slot; against an opposing cubicle or empty slot, damage goes to the rival lead.
 - **Skip:** do nothing in this sequence.
 
-Different developers act in parallel inside a sequence. Sequences animate in order so task completion, failure marks, sanity damage, quitting, project completion, and Brags remain readable.
+Different developers act in parallel inside a sequence. Sequences resolve at a deliberately paced interval, with acting and target markers on the 3D board, so task completion, failure marks, sanity damage, quitting, project completion, and Brags remain readable.
 
 ## Current MVP balance constants
 

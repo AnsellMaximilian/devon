@@ -35,11 +35,11 @@ export type Project = {
 };
 
 export const DEVELOPERS: Developer[] = [
-  { id: "chad", name: "Chad", role: "Frontend", completion: 48, sanity: 7, traitLabel: "Nepotism", trait: "In an open space, draw +1 developer at turn start.", quote: "My dad said this deploy is fine.", art: "/developers/chad.png", accent: "#42d9ff" },
+  { id: "chad", name: "Chad", role: "Frontend", completion: 48, sanity: 7, traitLabel: "Nepotism", trait: "In an open space, draw +1 developer at turn start.", quote: "My dad said this deploy is fine.", art: "/developers/chad-v2.png", accent: "#42d9ff" },
   { id: "fan", name: "Fan", role: "Backend", completion: 78, sanity: 10, traitLabel: "Superiority Complex", trait: "Takes 50% less taunt damage from Frontend developers.", quote: "Your CSS is not an architecture.", art: "/developers/fan.png", accent: "#ff427d" },
   { id: "aiden", name: "Aiden", role: "Full Stack", completion: 88, sanity: 6, traitLabel: "Deep Focus", trait: "Cannot enter open space. +8% completion in a cubicle.", quote: "…I already pushed the fix.", art: "/developers/aiden.png", accent: "#a26aff" },
   { id: "tigor", name: "Tigor", role: "Mobile", completion: 76, sanity: 12, traitLabel: "Spotter", trait: "Mobile tasks completed from his slot add +2 MVP.", quote: "One more rep. One more release.", art: "/developers/tigor.png", accent: "#ff8c35" },
-  { id: "wendy", name: "Wendy", role: "Frontend", completion: 70, sanity: 9, traitLabel: "Harmony", trait: "Allies in her open space take 1 less sanity damage.", quote: "Pixel-perfect, pitch-perfect.", art: "/developers/wendy.png", accent: "#ff63ad" },
+  { id: "wendy", name: "Wendy", role: "Frontend", completion: 70, sanity: 9, traitLabel: "Harmony", trait: "Allies in her open space take 1 less sanity damage.", quote: "Pixel-perfect, pitch-perfect.", art: "/developers/wendy-v2.png", accent: "#ff63ad" },
   { id: "stewart", name: "Stewart", role: "Full Stack", completion: 84, sanity: 14, traitLabel: "Googoo Gaga Code", trait: "Coworkers in his slot lose 8% completion power.", quote: "Friendship compiled successfully!", art: "/developers/stewart.png", accent: "#20d3c2" },
   { id: "priya", name: "Priya", role: "Backend", completion: 80, sanity: 11, traitLabel: "Incident Commander", trait: "The first failed Backend attempt each turn gains no failure mark.", quote: "Breathe. Read the logs.", art: "/developers/priya.png", accent: "#f3bd2f" },
   { id: "mateo", name: "Mateo", role: "Mobile", completion: 71, sanity: 9, traitLabel: "Rapid Prototype", trait: "His first Mobile attempt each turn gains +10% completion.", quote: "It works on my phone!", art: "/developers/mateo.png", accent: "#339cff" },
