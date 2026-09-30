@@ -10,11 +10,13 @@ Each lead starts at 30 sanity. Reduce the rival lead to 0 to win. A developer wh
 
 Each side has four opposing work-area slots. An open space holds four developers and enables coworker traits, but developers there may be taunted by developers in the directly opposing slot. A cubicle holds two developers, disables collaborative traits, and protects developer sanity: taunt damage is redirected to the player.
 
-Every battle begins in a dedicated Office Setup stage. The player's four slots begin unconfigured, and all project, deployment, and sprint actions remain unavailable until an illustrated Open Space or Cubicle card has been placed into every bay and the layout is confirmed. A configured bay can be replaced during setup. Once confirmed, the office cards leave the interface and the draw-pile counter takes their place. This makes capacity, protection, and collaboration an explicit decision instead of silently pre-filling the board. The computer configures its own office mix.
+Every battle begins in a dedicated Office Setup stage. A short stage announcement introduces it, the normal hand footer remains hidden, and all project, deployment, and sprint actions stay unavailable. Click a highlighted bay to open its layout dialog, then choose Open Space or Cubicles. A configured bay can be reopened and replaced until all four are filled. The Ready button remains visible but disabled until the layout is complete; confirming it enters Sprint Planning and reveals the hand and draw pile. This makes capacity, protection, and collaboration an explicit decision instead of silently pre-filling the board. The computer configures its own office mix.
 
 At battle start, the player reveals five developers from their deck. At the beginning of later turns, they draw one up to a hand limit of five. Chad's Nepotism can increase this to two when he is in open space. Aiden can only enter cubicles.
 
 Developer cards in the battle view can be inspected before committing to them. The profile dialog shows role compatibility, completion power, current and maximum sanity, and the developer's trait. A developer in hand is selected for deployment from this dialog. Rival cards face the rival side of the board but can be inspected the same way.
+
+The board camera supports horizontal panning and vertical tilt. Camera buttons can be clicked for a small adjustment or held for continuous movement. Planning phases announce the active player before normal interaction resumes.
 
 ## Projects and the shared backlog
 
