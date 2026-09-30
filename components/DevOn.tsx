@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, Brain, BriefcaseBusiness, Check, ChevronLeft, ChevronRight, CircleHelp, Code2, DoorOpen, Hand, Layers3, LockKeyhole, Minus, MousePointer2, Play, Plus, RotateCcw, Sparkles, Swords, Ticket, Trophy, Users, Volume2, X, Zap } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Brain, BriefcaseBusiness, Check, ChevronLeft, ChevronRight, CircleHelp, Code2, DoorOpen, Hand, Layers3, LockKeyhole, Minus, MousePointer2, Play, Plus, RotateCcw, Shield, Sparkles, Swords, Ticket, Trophy, Users, Volume2, X, Zap } from "lucide-react";
 import { DevCard } from "./DevCard";
 import { DEVELOPERS, PROJECTS, ROLE_CHANCES, getDeveloper, roleCanWork, type AreaType, type Developer, type Project } from "@/lib/game-data";
 
@@ -13,6 +13,8 @@ type TaskProgress = { completed: boolean; marks: number };
 type ProjectState = Project & { claimedBy: Owner | null; completed: boolean; progress: number; tasksState: Record<string, TaskProgress> };
 type PlannedAction = "skip" | "taunt" | `work:${string}`;
 type ActionHighlight = { actorId?: string; targetId?: string; kind: "work" | "taunt" };
+type BattlePhase = "setup" | "plan" | "resolving" | "brag" | "gameover";
+type InspectedDeveloper = { devId: string; placed?: PlacedDev; owner?: Owner; handIndex?: number };
 
 const starterDeck = DEVELOPERS.map((d) => d.id);
 const emptySlots = (): BoardSlot[] => Array.from({ length: 4 }, () => ({ type: null, developers: [] }));
@@ -128,24 +130,35 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
   const [plannerOpen, setPlannerOpen] = useState(false);
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [plan, setPlan] = useState<Record<string, PlannedAction>>({});
-  const [phase, setPhase] = useState<"plan" | "resolving" | "brag" | "gameover">("plan");
-  const [event, setEvent] = useState("Your sprint. Deploy a team and claim a project.");
+  const [phase, setPhase] = useState<BattlePhase>("setup");
+  const [event, setEvent] = useState("Set up your office before the first sprint begins.");
   const [eventTone, setEventTone] = useState<"neutral" | "good" | "bad">("neutral");
   const [brags, setBrags] = useState<number[]>([]);
   const [winner, setWinner] = useState<Owner | null>(null);
   const [seqActive, setSeqActive] = useState<number | null>(null);
   const [highlight, setHighlight] = useState<ActionHighlight | null>(null);
+  const [inspectedDeveloper, setInspectedDeveloper] = useState<InspectedDeveloper | null>(null);
   const playerProject = projects.find((p) => p.claimedBy === "player" && !p.completed);
   const enemyProject = projects.find((p) => p.claimedBy === "enemy" && !p.completed);
   const placed = playerSlots.flatMap((s) => s.developers);
+  const configuredAreas = playerSlots.filter((slot) => slot.type).length;
+  const setupReady = configuredAreas === 4;
+  const deckRemaining = Math.max(0, shuffledDeck.current.length - drawIndex);
 
   const configureSlot = (slotIndex: number) => {
-    if (phase !== "plan" || !selectedArea) return;
+    if (phase !== "setup" || !selectedArea) return;
     const slot = playerSlots[slotIndex];
-    if (slot.type) { setEvent("That bay already has a work area installed."); setEventTone("bad"); return; }
     setPlayerSlots((slots) => slots.map((s, i) => i === slotIndex ? { ...s, type: selectedArea } : s));
-    setEvent(`${selectedArea === "open" ? "Open Space" : "Cubicles"} installed in Work Area ${slotIndex + 1}.`);
+    setEvent(`${selectedArea === "open" ? "Open Space" : "Cubicles"} ${slot.type ? "replaced" : "installed"} in Work Area ${slotIndex + 1}.`);
     setEventTone("good"); setSelectedArea(null);
+  };
+
+  const finishSetup = () => {
+    if (!setupReady) return;
+    setSelectedArea(null);
+    setPhase("plan");
+    setEvent("Office locked in. Deploy developers and choose your first project.");
+    setEventTone("good");
   };
 
   const deploy = (slotIndex: number) => {
@@ -348,34 +361,38 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     nextProjects[1].claimedBy = "enemy";
     setProjects(nextProjects);
     setPlayerSanity(30); setEnemySanity(30); setTurn(1); setCameraX(0);
-    setPlannerOpen(false); setProjectModalOpen(false); setPlan({}); setPhase("plan"); setBrags([]);
-    setWinner(null); setSeqActive(null); setHighlight(null); setEventTone("neutral");
-    setEvent("Your sprint. Deploy a team and claim a project.");
+    setPlannerOpen(false); setProjectModalOpen(false); setPlan({}); setPhase("setup"); setBrags([]);
+    setWinner(null); setSeqActive(null); setHighlight(null); setInspectedDeveloper(null); setEventTone("neutral");
+    setEvent("Set up your office before the first sprint begins.");
   };
 
   return <main className="battle-screen">
     <AppHeader onHome={onExit} onDeck={onExit} deckCount={deck.length} inBattle />
     <div className="battle-hud">
       <PlayerHud owner="enemy" name="NULL POINTERS" sanity={enemySanity} max={30} project={enemyProject} targeted={highlight?.targetId === "enemy-lead"} />
-      <div className="turn-pill"><span>SPRINT</span><b>{String(turn).padStart(2, "0")}</b><small>{phase === "resolving" ? `SEQUENCE ${seqActive ?? 1}/8` : phase === "brag" ? "BRAG WINDOW" : "PLANNING"}</small></div>
+      <div className={`turn-pill ${phase === "setup" ? "setup" : ""}`}><span>{phase === "setup" ? "OFFICE" : "SPRINT"}</span><b>{phase === "setup" ? `${configuredAreas}/4` : String(turn).padStart(2, "0")}</b><small>{phase === "setup" ? "LAYOUT SETUP" : phase === "resolving" ? `SEQUENCE ${seqActive ?? 1}/8` : phase === "brag" ? "BRAG WINDOW" : "PLANNING"}</small></div>
       <PlayerHud owner="player" name="YOU // LOCALHOST" sanity={playerSanity} max={30} project={playerProject} targeted={highlight?.targetId === "player-lead"} />
     </div>
 
-    <div className="project-console">
+    {phase === "setup" ? <div className="setup-console">
+      <div className="setup-console-title"><Layers3 size={16} /><span><b>SETUP REQUIRED</b><small>Configure four work areas before the first sprint</small></span></div>
+      <div className="setup-steps"><span className="done"><Check size={12} /> Enter battle</span><i /><span className={configuredAreas ? "active" : ""}><Layers3 size={12} /> Place office cards</span><i /><span className={setupReady ? "ready" : ""}><Play size={12} /> Begin planning</span></div>
+      <strong>{configuredAreas}<small>/4</small></strong>
+    </div> : <div className="project-console">
       <div className="project-console-label"><BriefcaseBusiness size={15} /><span>ACTIVE PROJECT</span></div>
       {playerProject ? <button className="active-project-card" onClick={() => setProjectModalOpen(true)} style={{ "--project": playerProject.accent } as React.CSSProperties}>
         <span className="project-icon"><BriefcaseBusiness size={17} /></span><span><b>{playerProject.name}</b><small>{playerProject.tasks.filter((t) => playerProject.tasksState[t.id].completed).length}/{playerProject.tasks.length} TASKS · {playerProject.progress}/{playerProject.mvp} MVP</small></span><Meter value={playerProject.progress} max={playerProject.mvp} tone="lime" /><em>VIEW PLAN</em>
       </button> : <button className="select-project-button" onClick={() => setProjectModalOpen(true)} disabled={phase !== "plan"}><Plus size={16} /><span><b>Select a project</b><small>Review scope before committing</small></span><ChevronRight size={16} /></button>}
       <span className="project-console-tip">Shared backlog hidden until you choose · claims are exclusive</span>
-    </div>
+    </div>}
 
-    <div className="board-viewport">
-      <div className="board-world" style={{ transform: `translateX(calc(-50% + ${cameraX}px)) rotateX(58deg)` }}>
+    <div className={`board-viewport ${phase === "setup" ? "setup-board" : ""}`}>
+      <div className="board-world" style={{ transform: `translateX(calc(-50% + ${cameraX}px)) translateY(${phase === "setup" ? -105 : -150}px) rotateX(${phase === "setup" ? 70 : 65}deg)` }}>
         <div className="board-surface">
           <div className="lane-label enemy-lane">RIVAL OFFICE</div>
-          <div className="slot-row enemy-row">{enemySlots.map((slot, i) => <BoardSlotView key={i} slot={slot} index={i} owner="enemy" highlight={highlight} />)}</div>
+          <div className="slot-row enemy-row">{enemySlots.map((slot, i) => <BoardSlotView key={i} slot={slot} index={i} owner="enemy" highlight={highlight} onInspect={(placedDev) => setInspectedDeveloper({ devId: placedDev.devId, placed: placedDev, owner: "enemy" })} />)}</div>
           <div className="center-line"><span>PRODUCTION</span><i /><span>PRODUCTION</span></div>
-          <div className="slot-row player-row">{playerSlots.map((slot, i) => <BoardSlotView key={i} slot={slot} index={i} owner="player" selected={selectedHand !== null} selectedArea={selectedArea} onDeploy={() => deploy(i)} onConfigure={() => configureSlot(i)} highlight={highlight} />)}</div>
+          <div className="slot-row player-row">{playerSlots.map((slot, i) => <BoardSlotView key={i} slot={slot} index={i} owner="player" selected={selectedHand !== null} selectedArea={selectedArea} setupMode={phase === "setup"} onDeploy={() => deploy(i)} onConfigure={() => configureSlot(i)} onInspect={(placedDev) => setInspectedDeveloper({ devId: placedDev.devId, placed: placedDev, owner: "player" })} highlight={highlight} />)}</div>
           <div className="lane-label player-lane">YOUR OFFICE</div>
         </div>
       </div>
@@ -383,23 +400,62 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       {phase === "resolving" && <div className={`event-banner ${eventTone}`}><small>SEQUENCE {seqActive}/8</small><b>{event}</b></div>}
     </div>
 
-    <div className="battle-dock">
-      <div className="office-kit"><div className="hand-label"><span><Layers3 size={15} /> OFFICE CARDS</span><small>{playerSlots.filter((s) => s.type).length}/4 placed</small></div><div className="area-cards">
-        <button className={`area-card ${selectedArea === "open" ? "selected" : ""}`} onClick={() => { if (phase === "plan") { setSelectedArea(selectedArea === "open" ? null : "open"); setSelectedHand(null); } }}><img src="/areas/open-space.png" alt="Open Space" /><span><DoorOpen size={11} /> Open Space <b>4</b></span></button>
-        <button className={`area-card ${selectedArea === "cubicle" ? "selected" : ""}`} onClick={() => { if (phase === "plan") { setSelectedArea(selectedArea === "cubicle" ? null : "cubicle"); setSelectedHand(null); } }}><img src="/areas/cubicles.png" alt="Cubicles" /><span><LockKeyhole size={11} /> Cubicles <b>2</b></span></button>
-      </div></div>
-      <div className="hand-zone"><div className="hand-label"><span><Hand size={15} /> DEVELOPER HAND</span><small>{selectedArea ? "Place the office card into an empty bay" : selectedHand === null ? "Select a developer, then choose a configured area" : "Choose a highlighted work area"}</small></div><div className="hand-cards">{hand.map((id, i) => <DevCard key={`${id}-${i}`} dev={getDeveloper(id)} compact selected={selectedHand === i} onClick={() => { if (phase === "plan") { setSelectedHand(selectedHand === i ? null : i); setSelectedArea(null); } }} />)}{Array.from({ length: Math.max(0, 5 - hand.length) }).map((_, i) => <div className="empty-hand" key={i}><Code2 /></div>)}</div></div>
-      <div className="battle-actions">
-        {phase === "plan" && <button className="plan-button" onClick={() => setPlannerOpen(true)}><Ticket size={21} /><span><b>PLAN SPRINT</b><small>Assign up to 8 sequences</small></span><ChevronRight /></button>}
-        {phase === "resolving" && <div className="resolving-button"><span className="spinner" /><div><b>SPRINT IN PROGRESS</b><small>Actions resolve in sequence</small></div></div>}
-        {phase === "brag" && <><button className="brag-button" onClick={useBrag}><Sparkles /><span>BRAG!</span>{brags.length > 1 && <em>{brags.length}</em>}</button><button className="skip-button" onClick={skipBrag}>Skip</button></>}
-      </div>
+    <div className={`battle-dock ${phase === "setup" ? "setup-mode" : ""}`}>
+      {phase === "setup" ? <div className="office-setup-dock">
+        <div className="setup-instruction"><span className="setup-number">1</span><span><b>Choose a work area</b><small>Then click any bay on your side of the board. Pick again to replace one.</small></span></div>
+        <div className="setup-area-cards">
+          <button className={`area-card ${selectedArea === "open" ? "selected" : ""}`} onClick={() => setSelectedArea(selectedArea === "open" ? null : "open")}><img src="/areas/open-space.png" alt="Open Space" /><span><DoorOpen size={12} /> Open Space <b>4 DEVS</b></span></button>
+          <button className={`area-card ${selectedArea === "cubicle" ? "selected" : ""}`} onClick={() => setSelectedArea(selectedArea === "cubicle" ? null : "cubicle")}><img src="/areas/cubicles.png" alt="Cubicles" /><span><LockKeyhole size={12} /> Cubicles <b>2 DEVS</b></span></button>
+        </div>
+        <div className="setup-progress"><span><b>{configuredAreas}/4</b> WORK AREAS INSTALLED</span><div>{playerSlots.map((slot, index) => <i className={slot.type ?? ""} key={index}>{slot.type === "open" ? <DoorOpen size={11} /> : slot.type === "cubicle" ? <LockKeyhole size={11} /> : index + 1}</i>)}</div></div>
+        <button className="confirm-office" onClick={finishSetup} disabled={!setupReady}><Check size={17} /><span><b>{setupReady ? "CONFIRM OFFICE" : `${4 - configuredAreas} AREAS LEFT`}</b><small>{setupReady ? "Continue to sprint planning" : "Fill every bay to continue"}</small></span><ChevronRight size={18} /></button>
+      </div> : <>
+        <DrawPile remaining={deckRemaining} total={shuffledDeck.current.length} />
+        <div className="hand-zone"><div className="hand-label"><span><Hand size={15} /> DEVELOPER HAND</span><small>{selectedHand === null ? "Click a card to inspect and deploy" : "Choose a highlighted work area"}</small></div><div className="hand-cards">{hand.map((id, i) => <DevCard key={`${id}-${i}`} dev={getDeveloper(id)} compact selected={selectedHand === i} onClick={() => setInspectedDeveloper({ devId: id, handIndex: i })} />)}{Array.from({ length: Math.max(0, 5 - hand.length) }).map((_, i) => <div className="empty-hand" key={i}><Code2 /></div>)}</div></div>
+        <div className="battle-actions">
+          {phase === "plan" && <button className="plan-button" onClick={() => setPlannerOpen(true)}><Ticket size={21} /><span><b>PLAN SPRINT</b><small>Assign up to 8 sequences</small></span><ChevronRight /></button>}
+          {phase === "resolving" && <div className="resolving-button"><span className="spinner" /><div><b>SPRINT IN PROGRESS</b><small>Actions resolve in sequence</small></div></div>}
+          {phase === "brag" && <><button className="brag-button" onClick={useBrag}><Sparkles /><span>BRAG!</span>{brags.length > 1 && <em>{brags.length}</em>}</button><button className="skip-button" onClick={skipBrag}>Skip</button></>}
+        </div>
+      </>}
     </div>
 
     {plannerOpen && <Planner developers={placed} project={playerProject} plan={plan} setPlan={setPlan} onClose={() => setPlannerOpen(false)} onRun={resolveTurn} />}
     {projectModalOpen && <ProjectPicker projects={projects} activeProject={playerProject} onClaim={claimProject} onAbandon={abandon} onClose={() => setProjectModalOpen(false)} canEdit={phase === "plan"} />}
+    {inspectedDeveloper && <DeveloperDetails inspected={inspectedDeveloper} selected={inspectedDeveloper.handIndex !== undefined && selectedHand === inspectedDeveloper.handIndex} onClose={() => setInspectedDeveloper(null)} onSelect={inspectedDeveloper.handIndex === undefined || phase !== "plan" ? undefined : () => { setSelectedHand(selectedHand === inspectedDeveloper.handIndex ? null : inspectedDeveloper.handIndex!); setSelectedArea(null); setInspectedDeveloper(null); }} />}
     {phase === "gameover" && <div className="gameover-overlay"><div className={`gameover-card ${winner}`}><div className="burst" /><Trophy size={54} /><span>{winner === "player" ? "SHIP HAPPENS" : "PROD IS DOWN"}</span><h2>{winner === "player" ? "You shipped it." : "You burned out."}</h2><p>{winner === "player" ? "The rival lead has no sanity left. Take the win." : "Your sanity hit zero. The backlog wins this round."}</p><div><button className="primary-cta small" onClick={resetBattle}><RotateCcw size={17} /> Rematch</button><button className="secondary-cta" onClick={onExit}>Main menu</button></div></div></div>}
   </main>;
+}
+
+function DrawPile({ remaining, total }: { remaining: number; total: number }) {
+  return <div className="draw-pile">
+    <div className="hand-label"><span><Layers3 size={15} /> DRAW PILE</span><small>{total} card deck</small></div>
+    <div className="draw-pile-body">
+      <div className={`card-back-stack ${remaining ? "" : "empty"}`}><i /><i /><i><span>D<b>!</b></span></i></div>
+      <span><b>{remaining}</b><small>CARDS<br />REMAINING</small></span>
+    </div>
+  </div>;
+}
+
+function DeveloperDetails({ inspected, selected, onClose, onSelect }: { inspected: InspectedDeveloper; selected: boolean; onClose: () => void; onSelect?: () => void }) {
+  const dev = getDeveloper(inspected.devId);
+  const currentSanity = inspected.placed?.sanity ?? dev.sanity;
+  const workTypes = dev.role === "Full Stack" ? "Frontend + Backend" : dev.role;
+  return <div className="modal-backdrop card-detail-backdrop" onClick={onClose}><section className="developer-detail" onClick={(event) => event.stopPropagation()} style={{ "--accent": dev.accent } as React.CSSProperties}>
+    <button className="detail-close" onClick={onClose} aria-label="Close developer details"><X size={18} /></button>
+    <div className="detail-art"><img src={dev.art} alt={`${dev.name} portrait`} /><span>{dev.role}</span></div>
+    <div className="detail-copy">
+      <span className="eyebrow-small">DEVELOPER PROFILE</span><h2>{dev.name}</h2><blockquote>“{dev.quote}”</blockquote>
+      <div className="detail-stats">
+        <div><Brain size={18} /><span><b>{dev.completion}%</b><small>COMPLETION POWER</small></span></div>
+        <div><Shield size={18} /><span><b>{currentSanity}<small>/{dev.sanity}</small></b><small>{inspected.placed ? "CURRENT SANITY" : "SANITY"}</small></span></div>
+        <div><Code2 size={18} /><span><b>{workTypes}</b><small>WORK COMPATIBILITY</small></span></div>
+      </div>
+      <div className="detail-trait"><Sparkles size={20} /><span><small>SPECIAL TRAIT</small><b>{dev.traitLabel}</b><p>{dev.trait}</p></span></div>
+      {inspected.owner && <div className={`detail-owner ${inspected.owner}`}><span>{inspected.owner === "enemy" ? "RIVAL TEAM" : "YOUR TEAM"}</span><small>Work Area {(inspected.placed?.slot ?? 0) + 1}</small></div>}
+      {onSelect && <button className={`primary-cta detail-select ${selected ? "selected" : ""}`} onClick={onSelect}>{selected ? <Minus size={17} /> : <MousePointer2 size={17} />} {selected ? "Cancel deployment" : "Select for deployment"}</button>}
+    </div>
+  </section></div>;
 }
 
 function PlayerHud({ owner, name, sanity, max, project, targeted = false }: { owner: Owner; name: string; sanity: number; max: number; project?: ProjectState; targeted?: boolean }) {
@@ -433,13 +489,13 @@ function ProjectPicker({ projects, activeProject, onClaim, onAbandon, onClose, c
   </section></div>;
 }
 
-function BoardSlotView({ slot, index, owner, selected, selectedArea, onDeploy, onConfigure, highlight }: { slot: BoardSlot; index: number; owner: Owner; selected?: boolean; selectedArea?: AreaType | null; onDeploy?: () => void; onConfigure?: () => void; highlight?: ActionHighlight | null }) {
+function BoardSlotView({ slot, index, owner, selected, selectedArea, setupMode = false, onDeploy, onConfigure, onInspect, highlight }: { slot: BoardSlot; index: number; owner: Owner; selected?: boolean; selectedArea?: AreaType | null; setupMode?: boolean; onDeploy?: () => void; onConfigure?: () => void; onInspect?: (placed: PlacedDev) => void; highlight?: ActionHighlight | null }) {
   const cap = slot.type === "open" ? 4 : slot.type === "cubicle" ? 2 : 0;
-  const readyForArea = !slot.type && !!selectedArea;
+  const readyForArea = setupMode && !!selectedArea;
   const readyForDev = !!slot.type && !!selected && slot.developers.length < cap;
-  return <div className={`board-slot ${slot.type ?? "unconfigured"} ${readyForArea || readyForDev ? "drop-ready" : ""}`} onClick={readyForArea ? onConfigure : readyForDev ? onDeploy : undefined}>
+  return <div className={`board-slot ${owner} ${slot.type ?? "unconfigured"} ${readyForArea || readyForDev ? "drop-ready" : ""}`} onClick={readyForArea ? onConfigure : readyForDev ? onDeploy : undefined}>
     <div className="slot-header"><span>{slot.type === "open" ? <DoorOpen size={13} /> : slot.type === "cubicle" ? <LockKeyhole size={13} /> : <Layers3 size={13} />}{slot.type === "open" ? "OPEN SPACE" : slot.type === "cubicle" ? "CUBICLES" : "EMPTY BAY"}</span><b>{slot.type ? `${slot.developers.length}/${cap}` : "—"}</b></div>
-    {!slot.type ? <div className="unconfigured-slot"><div className="bay-grid" /><Layers3 size={22} /><b>{selectedArea ? `PLACE ${selectedArea === "open" ? "OPEN SPACE" : "CUBICLES"}` : "PLACE OFFICE CARD"}</b><small>Choose a card from your office kit</small></div> : <div className="slot-grid">{slot.developers.map((placed) => { const dev = getDeveloper(placed.devId); const targeted = highlight?.targetId === placed.instanceId; const acting = highlight?.actorId === placed.instanceId; return <div className={`board-card ${targeted ? "targeted" : ""} ${acting ? `acting ${highlight?.kind}` : ""}`} key={placed.instanceId} style={{ "--accent": dev.accent } as React.CSSProperties}>{targeted && <span className="target-marker">!</span>}{acting && <span className="action-marker">{highlight?.kind === "taunt" ? "💬" : "</>"}</span>}<img src={dev.art} alt={dev.name} /><div><b>{dev.name}</b><span><Brain size={10} /> {placed.sanity}</span></div></div>; })}{Array.from({ length: Math.max(0, cap - slot.developers.length) }).map((_, i) => <div className="slot-empty" key={i}><Plus size={13} /></div>)}</div>}
+    {!slot.type ? <div className="unconfigured-slot"><div className="bay-grid" /><Layers3 size={22} /><b>{selectedArea ? `PLACE ${selectedArea === "open" ? "OPEN SPACE" : "CUBICLES"}` : "PLACE OFFICE CARD"}</b><small>Choose a card from the setup tray</small></div> : <div className="slot-grid">{slot.developers.map((placed) => { const dev = getDeveloper(placed.devId); const targeted = highlight?.targetId === placed.instanceId; const acting = highlight?.actorId === placed.instanceId; return <button type="button" aria-label={`Inspect ${dev.name}`} className={`board-card ${targeted ? "targeted" : ""} ${acting ? `acting ${highlight?.kind}` : ""}`} onClick={(event) => { event.stopPropagation(); onInspect?.(placed); }} key={placed.instanceId} style={{ "--accent": dev.accent } as React.CSSProperties}>{targeted && <span className="target-marker">!</span>}{acting && <span className="action-marker">{highlight?.kind === "taunt" ? "💬" : "</>"}</span>}<span className="board-card-face"><img src={dev.art} alt={dev.name} /><span className="board-card-meta"><b>{dev.name}</b><span><Brain size={10} /> {placed.sanity}</span></span></span></button>; })}{Array.from({ length: Math.max(0, cap - slot.developers.length) }).map((_, i) => <div className="slot-empty" key={i}><Plus size={13} /></div>)}{slot.type === "cubicle" && Array.from({ length: 2 }).map((_, i) => <div className="slot-blocked" key={`blocked-${i}`}><LockKeyhole size={12} /></div>)}</div>}
     <div className="slot-number">0{index + 1}</div>
   </div>;
 }
