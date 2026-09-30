@@ -186,3 +186,49 @@ body { overflow-x:hidden; }
 
 @media (max-width:900px) { .deck-viewer-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }.setup-deck-preview { width:175px;left:10px; }.setup-deck-preview .draw-pile-body>span { display:none; } }
 @media (max-width:760px) { .draw-pile { display:block; }.battle-dock>.draw-pile { width:118px;flex-basis:118px;margin-right:7px;padding-right:7px; }.battle-dock>.draw-pile .draw-pile-body>span { display:none; }.setup-deck-preview { width:112px;padding:7px;bottom:8px; }.setup-deck-preview .hand-label small,.setup-deck-preview .draw-pile-body>span { display:none; }.deck-viewer-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.deck-viewer>header { grid-template-columns:1fr 34px; }.deck-viewer-count { display:none; }.hand-drag-card { width:51px;flex-basis:51px; }.hand-drag-card .dev-card.compact { width:62px;height:85px; } }
+
+/* Centered turn hand, stronger sprint CTA, and project-selection guidance. */
+.battle-dock { display:grid;grid-template-columns:minmax(170px,1fr) minmax(390px,520px) minmax(285px,1fr);gap:22px;padding-inline:2vw; }
+.battle-dock>.draw-pile { justify-self:start;margin-right:0; }
+.battle-dock>.hand-zone { width:100%;min-width:0;justify-self:center; }
+.battle-dock>.hand-zone .hand-label { width:100%;max-width:none;padding:0 9px; }
+.battle-dock>.hand-zone .hand-cards { justify-content:center; }
+.battle-dock>.battle-actions { justify-self:end; }
+.plan-button { min-width:300px;height:78px;padding:12px 18px;border:2px solid #37d8f1;background:linear-gradient(135deg,#1b5261,#12313e 72%);box-shadow:0 8px 0 #0b5264,0 14px 34px #0008,0 0 30px #32d8f536;transition:transform .18s,box-shadow .18s,filter .18s; }
+.plan-button:hover { transform:translateY(-3px);filter:brightness(1.12);box-shadow:0 11px 0 #0b5264,0 18px 38px #0009,0 0 42px #32d8f55c; }
+.plan-button>svg:first-child { filter:drop-shadow(0 0 8px #32d8f5a8); }
+.plan-button b { font-size:16px;letter-spacing:.06em; }
+.plan-button small { margin-top:3px;font-size:8px;color:#95b8c5; }
+
+.select-project-button.needs-attention { position:relative;z-index:45;border-color:var(--lime);background:linear-gradient(135deg,#203929,#15303a);box-shadow:0 0 0 2px #a8e94442,0 0 34px #a8e94482;animation:projectButtonCallout .58s ease-in-out infinite alternate; }
+.select-project-button.needs-attention b { color:#d9ff9c; }
+.project-pointer { position:absolute;z-index:44;left:455px;top:28px;width:112px;height:auto;pointer-events:none;filter:drop-shadow(0 12px 10px #000b) drop-shadow(0 0 12px #32d8f588);transform-origin:18% 18%;animation:projectPointerCallout .62s cubic-bezier(.22,.9,.35,1) infinite alternate; }
+.project-required-warning { position:absolute;z-index:34;left:50%;top:35%;transform:translate(-50%,-50%);min-width:390px;display:flex;align-items:center;justify-content:center;gap:11px;padding:14px 20px;border:1px solid var(--lime);border-radius:9px;background:#0a1712ee;box-shadow:0 18px 45px #000c,0 0 34px #a8e94442;text-align:left;pointer-events:none;animation:projectWarningIn .36s cubic-bezier(.2,1.45,.35,1) both; }
+.project-required-warning>svg { flex:0 0 auto;color:var(--lime);filter:drop-shadow(0 0 8px #a8e9449e); }
+.project-required-warning b,.project-required-warning small { display:block; }
+.project-required-warning b { color:#edffc9;font:800 14px Space Grotesk;letter-spacing:.09em; }
+.project-required-warning small { margin-top:3px;color:#8fa894;font:500 8px DM Mono; }
+@keyframes projectButtonCallout { to { transform:translateY(-2px) scale(1.025);box-shadow:0 0 0 3px #a8e94458,0 0 46px #a8e944a8; } }
+@keyframes projectPointerCallout { from { opacity:.78;transform:translate(14px,12px) rotate(2deg) scale(.9); } to { opacity:1;transform:translate(0,0) rotate(-4deg) scale(1); } }
+@keyframes projectWarningIn { from { opacity:0;transform:translate(-50%,-35%) scale(.86); } }
+
+@media (max-width:1050px) {
+  .battle-dock { grid-template-columns:130px minmax(310px,1fr) 235px;gap:10px; }
+  .battle-dock>.draw-pile { width:130px;padding-right:8px; }
+  .battle-dock>.draw-pile .draw-pile-body>span { display:none; }
+  .plan-button { min-width:225px;height:70px;padding-inline:12px; }
+  .plan-button b { font-size:14px; }
+  .project-pointer { left:425px;width:100px; }
+}
+@media (max-width:760px) {
+  .battle-dock { grid-template-columns:94px minmax(245px,1fr) 170px;gap:6px;padding-inline:6px; }
+  .battle-dock>.draw-pile { width:94px;min-width:94px;padding-right:3px;margin:0; }
+  .battle-dock>.hand-zone .hand-label { padding-inline:3px; }
+  .plan-button { min-width:165px;height:64px;padding:8px;gap:7px; }
+  .plan-button b { font-size:11px; }
+  .project-pointer { left:330px;top:30px;width:86px; }
+  .project-required-warning { min-width:0;width:86%;top:31%;padding:12px 14px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .select-project-button.needs-attention,.project-pointer { animation:none; }
+}

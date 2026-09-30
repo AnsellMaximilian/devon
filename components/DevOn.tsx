@@ -139,6 +139,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
   const [cameraZoom, setCameraZoom] = useState(1);
   const [plannerOpen, setPlannerOpen] = useState(false);
   const [projectModalOpen, setProjectModalOpen] = useState(false);
+  const [projectNudge, setProjectNudge] = useState<number | null>(null);
   const [plan, setPlan] = useState<Record<string, PlannedAction>>({});
   const [phase, setPhase] = useState<BattlePhase>("setup");
   const [event, setEvent] = useState("Set up your office before the first sprint begins.");
@@ -167,6 +168,12 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     const timer = setTimeout(() => setAnnouncement(null), 2100);
     return () => clearTimeout(timer);
   }, [announcement?.key]);
+
+  useEffect(() => {
+    if (!projectNudge) return;
+    const timer = setTimeout(() => setProjectNudge(null), 3600);
+    return () => clearTimeout(timer);
+  }, [projectNudge]);
 
   useEffect(() => () => {
     if (cameraHoldDelay.current) clearTimeout(cameraHoldDelay.current);
@@ -302,6 +309,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
   const finishSetup = () => {
     if (!setupReady) return;
     setSelectedArea(null); endAreaDrag();
+    setProjectNudge(null);
     setPhase("plan");
     setEvent("Office locked in. Deploy developers and choose your first project.");
     setEventTone("good");
@@ -329,6 +337,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     const target = projects.find((p) => p.id === id);
     if (!target || target.claimedBy || target.completed) return;
     setProjects((ps) => ps.map((p) => p.id === id ? { ...p, claimedBy: "player" } : p));
+    setProjectNudge(null);
     setProjectModalOpen(false);
     setEvent(`${target.name} locked. Time to plan the sprint.`); setEventTone("good");
   };
@@ -338,6 +347,23 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     setPlayerSanity((s) => Math.max(0, s - 3));
     setProjects((ps) => ps.map((p) => p.id === playerProject.id ? { ...p, claimedBy: null, progress: 0, tasksState: Object.fromEntries(p.tasks.map((t) => [t.id, { completed: false, marks: 0 }])) } : p));
     setEvent("Project abandoned. Your reputation takes 3 sanity damage."); setEventTone("bad");
+  };
+
+  const openProjectPicker = () => {
+    if (phase !== "plan") return;
+    setProjectNudge(null);
+    setProjectModalOpen(true);
+  };
+
+  const openSprintPlanner = () => {
+    if (phase !== "plan") return;
+    if (!playerProject) {
+      setProjectNudge(Date.now());
+      setEvent("Select a project before planning this sprint.");
+      setEventTone("bad");
+      return;
+    }
+    setPlannerOpen(true);
   };
 
   const completionChance = (dev: Developer, taskId: string, project: ProjectState, slots: BoardSlot[], instance: PlacedDev, sequence: number) => {
@@ -509,7 +535,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     nextProjects[1].claimedBy = "enemy";
     setProjects(nextProjects);
     setPlayerSanity(30); setEnemySanity(30); setTurn(1); setCameraX(0); setCameraTilt(52); setCameraZoom(1);
-    setPlannerOpen(false); setProjectModalOpen(false); setPlan({}); setPhase("setup"); setBrags([]);
+    setPlannerOpen(false); setProjectModalOpen(false); setProjectNudge(null); setPlan({}); setPhase("setup"); setBrags([]);
     setWinner(null); setSeqActive(null); setHighlight(null); setInspectedDeveloper(null); setEventTone("neutral");
     setAnnouncement({ key: Date.now(), title: "OFFICE SETUP", subtitle: "Build your workspace before the first sprint", tone: "lime" });
     setEvent("Set up your office before the first sprint begins.");
@@ -527,7 +553,8 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       <div className="project-console-label"><BriefcaseBusiness size={15} /><span>ACTIVE PROJECT</span></div>
       {playerProject ? <button className="active-project-card" onClick={() => setProjectModalOpen(true)} style={{ "--project": playerProject.accent } as React.CSSProperties}>
         <span className="project-icon"><BriefcaseBusiness size={17} /></span><span><b>{playerProject.name}</b><small>{playerProject.tasks.filter((t) => playerProject.tasksState[t.id].completed).length}/{playerProject.tasks.length} TASKS · {playerProject.progress}/{playerProject.mvp} MVP</small></span><Meter value={playerProject.progress} max={playerProject.mvp} tone="lime" /><em>VIEW PLAN</em>
-      </button> : <button className="select-project-button" onClick={() => setProjectModalOpen(true)} disabled={phase !== "plan"}><Plus size={16} /><span><b>Select a project</b><small>Review scope before committing</small></span><ChevronRight size={16} /></button>}
+      </button> : <button className={`select-project-button ${projectNudge ? "needs-attention" : ""}`} onClick={openProjectPicker} disabled={phase !== "plan"}><Plus size={16} /><span><b>Select a project</b><small>Review scope before committing</small></span><ChevronRight size={16} /></button>}
+      {projectNudge && <img key={projectNudge} className="project-pointer" src="/ui/project-pointer.png" alt="" aria-hidden="true" />}
       <span className="project-console-tip">Shared backlog hidden until you choose · claims are exclusive</span>
     </div>}
 
@@ -548,6 +575,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
         <div className="zoom-controls"><button aria-label="Zoom board out" title="Hold to zoom out" {...holdProps(() => setCameraZoom((zoom) => clamp(zoom - .025, .72, 1.3)))}><ZoomOut /></button><span><b>{Math.round(cameraZoom * 100)}%</b><small>ZOOM</small></span><button aria-label="Zoom board in" title="Hold to zoom in" {...holdProps(() => setCameraZoom((zoom) => clamp(zoom + .025, .72, 1.3)))}><ZoomIn /></button></div>
       </div>
       {announcement && <div key={announcement.key} className={`stage-announcement ${announcement.tone}`}><small>{phase === "setup" ? "PRE-BATTLE" : "ACTIVE PLAYER"}</small><b>{announcement.title}</b><span>{announcement.subtitle}</span></div>}
+      {phase === "plan" && projectNudge && <div key={projectNudge} className="project-required-warning" role="status" aria-live="polite"><AlertTriangle size={18} /><span><b>SELECT A PROJECT FIRST</b><small>Claim work from the shared backlog, then plan your sprint.</small></span></div>}
       {phase === "setup" && !announcement && configuredAreas === 0 && <div className="setup-drag-hint"><b>PLACE YOUR OFFICE SPACES</b><span>Drag space cards into slots</span></div>}
       {phase === "setup" && !announcement && <div className="setup-card-tray" aria-label="Reusable office space cards"><OfficeCard area="open" selected={selectedArea === "open"} dragging={draggedArea === "open"} onClick={() => selectAreaCard("open")} onPointerDown={(event) => startAreaPointer(event, "open")} onPointerMove={moveAreaPointer} onPointerUp={finishAreaPointer} onPointerCancel={cancelAreaPointer} /><OfficeCard area="cubicle" selected={selectedArea === "cubicle"} dragging={draggedArea === "cubicle"} onClick={() => selectAreaCard("cubicle")} onPointerDown={(event) => startAreaPointer(event, "cubicle")} onPointerMove={moveAreaPointer} onPointerUp={finishAreaPointer} onPointerCancel={cancelAreaPointer} /></div>}
       {phase === "setup" && <div className="setup-deck-preview"><DrawPile remaining={deck.length} total={deck.length} label="YOUR DECK" onOpen={() => setDeckOpen(true)} /></div>}
@@ -559,7 +587,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
         <DrawPile remaining={deckRemaining} total={shuffledDeck.current.length} onOpen={() => setDeckOpen(true)} />
         <div className="hand-zone"><div className="hand-label"><span><Hand size={15} /> DEVELOPER HAND</span><small>Click to inspect · drag onto an exact desk</small></div><div className="hand-cards fanned">{hand.map((id, i) => { const dev = getDeveloper(id); const offset = i - (hand.length - 1) / 2; return <div className={`hand-drag-card ${draggedDeveloper?.handIndex === i ? "dragging" : ""}`} style={{ "--fan-angle": `${offset * 3.5}deg`, "--fan-y": `${Math.abs(offset) * 3}px`, zIndex: i + 1 } as React.CSSProperties} onClick={() => inspectHandDeveloper(id, i)} onPointerDown={(event) => startDeveloperPointer(event, i, id)} onPointerMove={moveDeveloperPointer} onPointerUp={finishDeveloperPointer} onPointerCancel={cancelDeveloperPointer} key={`${id}-${i}`}><DevCard dev={dev} compact /></div>; })}{Array.from({ length: Math.max(0, 5 - hand.length) }).map((_, i) => <div className="empty-hand" key={i}><Code2 /></div>)}</div></div>
         <div className="battle-actions">
-          {phase === "plan" && <button className="plan-button" onClick={() => setPlannerOpen(true)}><Ticket size={21} /><span><b>PLAN SPRINT</b><small>Assign up to 8 sequences</small></span><ChevronRight /></button>}
+          {phase === "plan" && <button className="plan-button" onClick={openSprintPlanner}><Ticket size={27} /><span><b>PLAN SPRINT</b><small>Assign up to 8 sequences</small></span><ChevronRight /></button>}
           {phase === "resolving" && <div className="resolving-button"><span className="spinner" /><div><b>SPRINT IN PROGRESS</b><small>Actions resolve in sequence</small></div></div>}
           {phase === "brag" && <><button className="brag-button" onClick={useBrag}><Sparkles /><span>BRAG!</span>{brags.length > 1 && <em>{brags.length}</em>}</button><button className="skip-button" onClick={skipBrag}>Skip</button></>}
         </div>
