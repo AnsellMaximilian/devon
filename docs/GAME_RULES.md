@@ -16,7 +16,7 @@ During deployment, every available desk is an independent target. After selectin
 
 At battle start, the player reveals five developers from their deck. At the beginning of later turns, they draw one up to a hand limit of five. Chad's Nepotism can increase this to two when he is in open space. Aiden can only enter cubicles.
 
-Developer cards in the battle view can be inspected before committing to them. The profile dialog shows role compatibility, completion power, current and maximum sanity, and the developer's trait. A developer in hand is selected for deployment from this dialog. Rival cards face the rival side of the board but can be inspected the same way.
+Developer cards in the battle view can be inspected before committing to them. The profile dialog shows role compatibility, completion power, current and maximum sanity, and the developer's trait. Clicking a developer in hand opens this inspection-only profile; deployment is performed by dragging the fanned hand card directly onto an exact empty desk. The deck stack remains available during Office Setup and normal play, opening a complete loadout overview so the player can compare roles and traits before choosing office layouts. Cards in that overview are informational and cannot bypass the normal draw-and-hand rules. Rival cards face the rival side of the board but can be inspected the same way.
 
 The board camera supports horizontal panning, vertical tilt, and bounded zoom from 72% to 130%. Camera buttons can be clicked for a small adjustment or held for continuous movement. Planning phases announce the active player before normal interaction resumes.
 

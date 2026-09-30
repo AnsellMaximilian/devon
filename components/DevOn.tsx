@@ -121,11 +121,14 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     { type: "open", developers: [{ instanceId: "cpu-wendy", devId: "wendy", sanity: 9, slot: 2, position: 0 }] },
     { type: "cubicle", developers: [] }
   ]);
-  const [selectedHand, setSelectedHand] = useState<number | null>(null);
+  const [deckOpen, setDeckOpen] = useState(false);
   const [selectedArea, setSelectedArea] = useState<AreaType | null>(null);
   const [draggedArea, setDraggedArea] = useState<AreaType | null>(null);
   const [dragPointer, setDragPointer] = useState<{ x: number; y: number } | null>(null);
   const [hoveredAreaSlot, setHoveredAreaSlot] = useState<number | null>(null);
+  const [draggedDeveloper, setDraggedDeveloper] = useState<{ handIndex: number; devId: string } | null>(null);
+  const [developerDragPointer, setDeveloperDragPointer] = useState<{ x: number; y: number } | null>(null);
+  const [hoveredDesk, setHoveredDesk] = useState<{ slotIndex: number; position: number } | null>(null);
   const [lastAreaInstall, setLastAreaInstall] = useState<{ slot: number; key: number } | null>(null);
   const [projects, setProjects] = useState<ProjectState[]>(() => { const ps = freshProjects(); ps[1].claimedBy = "enemy"; return ps; });
   const [playerSanity, setPlayerSanity] = useState(30);
@@ -150,6 +153,8 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
   const cameraHoldInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const areaPointerDrag = useRef<{ area: AreaType; pointerId: number; startX: number; startY: number; dragging: boolean; slotIndex: number | null } | null>(null);
   const suppressAreaClick = useRef(false);
+  const developerPointerDrag = useRef<{ handIndex: number; devId: string; pointerId: number; startX: number; startY: number; dragging: boolean; desk: { slotIndex: number; position: number } | null } | null>(null);
+  const suppressDeveloperClick = useRef(false);
   const playerProject = projects.find((p) => p.claimedBy === "player" && !p.completed);
   const enemyProject = projects.find((p) => p.claimedBy === "enemy" && !p.completed);
   const placed = playerSlots.flatMap((s) => s.developers);
@@ -248,6 +253,52 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     setSelectedArea(selectedArea === area ? null : area);
   };
 
+  const endDeveloperDrag = () => { developerPointerDrag.current = null; setDraggedDeveloper(null); setDeveloperDragPointer(null); setHoveredDesk(null); };
+
+  const startDeveloperPointer = (event: React.PointerEvent<HTMLDivElement>, handIndex: number, devId: string) => {
+    if (phase !== "plan" || (event.pointerType === "mouse" && event.button !== 0)) return;
+    developerPointerDrag.current = { handIndex, devId, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, dragging: false, desk: null };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const moveDeveloperPointer = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = developerPointerDrag.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (!drag.dragging && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 6) return;
+    event.preventDefault();
+    if (!drag.dragging) { drag.dragging = true; setDraggedDeveloper({ handIndex: drag.handIndex, devId: drag.devId }); }
+    setDeveloperDragPointer({ x: event.clientX, y: event.clientY });
+    const deskElement = document.elementFromPoint(event.clientX, event.clientY)?.closest("[data-developer-desk]") as HTMLElement | null;
+    const [slotValue, positionValue] = deskElement?.dataset.developerDesk?.split(":") ?? [];
+    const desk = slotValue !== undefined && positionValue !== undefined ? { slotIndex: Number(slotValue), position: Number(positionValue) } : null;
+    drag.desk = desk && Number.isInteger(desk.slotIndex) && Number.isInteger(desk.position) ? desk : null;
+    setHoveredDesk(drag.desk);
+  };
+
+  const finishDeveloperPointer = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = developerPointerDrag.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (drag.dragging) {
+      event.preventDefault(); suppressDeveloperClick.current = true;
+      if (drag.desk) deploy(drag.handIndex, drag.desk.slotIndex, drag.desk.position);
+      setTimeout(() => { suppressDeveloperClick.current = false; }, 0);
+    }
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    endDeveloperDrag();
+  };
+
+  const cancelDeveloperPointer = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = developerPointerDrag.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    endDeveloperDrag();
+  };
+
+  const inspectHandDeveloper = (devId: string, handIndex: number) => {
+    if (suppressDeveloperClick.current) { suppressDeveloperClick.current = false; return; }
+    setInspectedDeveloper({ devId, handIndex });
+  };
+
   const finishSetup = () => {
     if (!setupReady) return;
     setSelectedArea(null); endAreaDrag();
@@ -257,9 +308,9 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     showAnnouncement("YOUR TURN", "Sprint 01 · Deploy your team and choose a project", "cyan");
   };
 
-  const deploy = (slotIndex: number, position: number) => {
-    if (selectedHand === null || phase !== "plan") return;
-    const dev = getDeveloper(hand[selectedHand]);
+  const deploy = (handIndex: number, slotIndex: number, position: number) => {
+    if (phase !== "plan" || !hand[handIndex]) return;
+    const dev = getDeveloper(hand[handIndex]);
     const slot = playerSlots[slotIndex];
     if (!slot.type) { setEvent("Install an office card in that bay before deploying a developer."); setEventTone("bad"); return; }
     const cap = slot.type === "open" ? 4 : 2;
@@ -268,8 +319,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     if (dev.id === "aiden" && slot.type === "open") { setEvent("Aiden refuses the open space. Try a cubicle."); setEventTone("bad"); return; }
     const instance: PlacedDev = { instanceId: `${dev.id}-${Date.now()}`, devId: dev.id, sanity: dev.sanity, slot: slotIndex, position };
     setPlayerSlots((slots) => slots.map((s, i) => i === slotIndex ? { ...s, developers: [...s.developers, instance] } : s));
-    setHand((h) => h.filter((_, i) => i !== selectedHand));
-    setSelectedHand(null);
+    setHand((h) => h.filter((_, i) => i !== handIndex));
     setEvent(`${dev.name} took Desk ${position + 1} in Work Area ${slotIndex + 1}.`); setEventTone("good");
   };
 
@@ -454,7 +504,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       { type: "open", developers: [{ instanceId: "cpu-wendy", devId: "wendy", sanity: 9, slot: 2, position: 0 }] },
       { type: "cubicle", developers: [] }
     ]);
-    setSelectedHand(null); setSelectedArea(null); endAreaDrag(); setLastAreaInstall(null);
+    setDeckOpen(false); setSelectedArea(null); endAreaDrag(); endDeveloperDrag(); setLastAreaInstall(null);
     const nextProjects = freshProjects();
     nextProjects[1].claimedBy = "enemy";
     setProjects(nextProjects);
@@ -487,7 +537,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
           <div className="lane-label enemy-lane">RIVAL OFFICE</div>
           <div className="slot-row enemy-row">{enemySlots.map((slot, i) => <BoardSlotView key={i} slot={slot} index={i} owner="enemy" highlight={highlight} onInspect={(placedDev) => setInspectedDeveloper({ devId: placedDev.devId, placed: placedDev, owner: "enemy" })} />)}</div>
           <div className="center-line"><span>PRODUCTION</span><i /><span>PRODUCTION</span></div>
-          <div className="slot-row player-row">{playerSlots.map((slot, i) => <BoardSlotView key={`${i}-${lastAreaInstall?.slot === i ? lastAreaInstall.key : 0}`} slot={slot} index={i} owner="player" selected={selectedHand !== null} setupMode={phase === "setup"} selectedArea={selectedArea} draggedArea={draggedArea} dragOver={hoveredAreaSlot === i} justPlaced={lastAreaInstall?.slot === i} onDeploy={(position) => deploy(i, position)} onConfigure={(area) => configureSlot(i, area)} onInspect={(placedDev) => setInspectedDeveloper({ devId: placedDev.devId, placed: placedDev, owner: "player" })} highlight={highlight} />)}</div>
+          <div className="slot-row player-row">{playerSlots.map((slot, i) => <BoardSlotView key={`${i}-${lastAreaInstall?.slot === i ? lastAreaInstall.key : 0}`} slot={slot} index={i} owner="player" setupMode={phase === "setup"} selectedArea={selectedArea} draggedArea={draggedArea} dragOver={hoveredAreaSlot === i} draggedDeveloper={draggedDeveloper} hoveredDeskPosition={hoveredDesk?.slotIndex === i ? hoveredDesk.position : null} justPlaced={lastAreaInstall?.slot === i} onConfigure={(area) => configureSlot(i, area)} onInspect={(placedDev) => setInspectedDeveloper({ devId: placedDev.devId, placed: placedDev, owner: "player" })} highlight={highlight} />)}</div>
           <div className="lane-label player-lane">YOUR OFFICE</div>
         </div>
       </div>
@@ -500,13 +550,14 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       {announcement && <div key={announcement.key} className={`stage-announcement ${announcement.tone}`}><small>{phase === "setup" ? "PRE-BATTLE" : "ACTIVE PLAYER"}</small><b>{announcement.title}</b><span>{announcement.subtitle}</span></div>}
       {phase === "setup" && !announcement && configuredAreas === 0 && <div className="setup-drag-hint"><b>PLACE YOUR OFFICE SPACES</b><span>Drag space cards into slots</span></div>}
       {phase === "setup" && !announcement && <div className="setup-card-tray" aria-label="Reusable office space cards"><OfficeCard area="open" selected={selectedArea === "open"} dragging={draggedArea === "open"} onClick={() => selectAreaCard("open")} onPointerDown={(event) => startAreaPointer(event, "open")} onPointerMove={moveAreaPointer} onPointerUp={finishAreaPointer} onPointerCancel={cancelAreaPointer} /><OfficeCard area="cubicle" selected={selectedArea === "cubicle"} dragging={draggedArea === "cubicle"} onClick={() => selectAreaCard("cubicle")} onPointerDown={(event) => startAreaPointer(event, "cubicle")} onPointerMove={moveAreaPointer} onPointerUp={finishAreaPointer} onPointerCancel={cancelAreaPointer} /></div>}
+      {phase === "setup" && <div className="setup-deck-preview"><DrawPile remaining={deck.length} total={deck.length} label="YOUR DECK" onOpen={() => setDeckOpen(true)} /></div>}
       {phase === "setup" && <div className="setup-ready-panel"><div><span>OFFICE LAYOUT</span><b>{configuredAreas}<small>/4</small></b><p>{setupReady ? "Every bay is configured." : selectedArea ? `Click a bay to place ${selectedArea === "open" ? "Open Space" : "Cubicles"}.` : "Drag a reusable space card into each bay."}</p></div><button onClick={finishSetup} disabled={!setupReady}><Check size={18} /><span><b>READY</b><small>{setupReady ? "Begin Sprint 01" : `${4 - configuredAreas} bays remaining`}</small></span></button></div>}
       {phase === "resolving" && <div className={`event-banner ${eventTone}`}><small>SEQUENCE {seqActive}/8</small><b>{event}</b></div>}
     </div>
 
     {phase !== "setup" && <div className="battle-dock">
-        <DrawPile remaining={deckRemaining} total={shuffledDeck.current.length} />
-        <div className="hand-zone"><div className="hand-label"><span><Hand size={15} /> DEVELOPER HAND</span><small>{selectedHand === null ? "Click a card to inspect and deploy" : "Choose a highlighted desk"}</small></div><div className="hand-cards">{hand.map((id, i) => <DevCard key={`${id}-${i}`} dev={getDeveloper(id)} compact selected={selectedHand === i} onClick={() => setInspectedDeveloper({ devId: id, handIndex: i })} />)}{Array.from({ length: Math.max(0, 5 - hand.length) }).map((_, i) => <div className="empty-hand" key={i}><Code2 /></div>)}</div></div>
+        <DrawPile remaining={deckRemaining} total={shuffledDeck.current.length} onOpen={() => setDeckOpen(true)} />
+        <div className="hand-zone"><div className="hand-label"><span><Hand size={15} /> DEVELOPER HAND</span><small>Click to inspect · drag onto an exact desk</small></div><div className="hand-cards fanned">{hand.map((id, i) => { const dev = getDeveloper(id); const offset = i - (hand.length - 1) / 2; return <div className={`hand-drag-card ${draggedDeveloper?.handIndex === i ? "dragging" : ""}`} style={{ "--fan-angle": `${offset * 3.5}deg`, "--fan-y": `${Math.abs(offset) * 3}px`, zIndex: i + 1 } as React.CSSProperties} onClick={() => inspectHandDeveloper(id, i)} onPointerDown={(event) => startDeveloperPointer(event, i, id)} onPointerMove={moveDeveloperPointer} onPointerUp={finishDeveloperPointer} onPointerCancel={cancelDeveloperPointer} key={`${id}-${i}`}><DevCard dev={dev} compact /></div>; })}{Array.from({ length: Math.max(0, 5 - hand.length) }).map((_, i) => <div className="empty-hand" key={i}><Code2 /></div>)}</div></div>
         <div className="battle-actions">
           {phase === "plan" && <button className="plan-button" onClick={() => setPlannerOpen(true)}><Ticket size={21} /><span><b>PLAN SPRINT</b><small>Assign up to 8 sequences</small></span><ChevronRight /></button>}
           {phase === "resolving" && <div className="resolving-button"><span className="spinner" /><div><b>SPRINT IN PROGRESS</b><small>Actions resolve in sequence</small></div></div>}
@@ -515,10 +566,12 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     </div>}
 
     {phase === "setup" && draggedArea && dragPointer && <div aria-hidden="true" className={`setup-drag-ghost ${draggedArea}`} style={{ left: dragPointer.x, top: dragPointer.y }}><img src={draggedArea === "open" ? "/areas/open-space.png" : "/areas/cubicles.png"} alt="" /><span>{draggedArea === "open" ? <DoorOpen size={15} /> : <LockKeyhole size={15} />}<b>{draggedArea === "open" ? "OPEN SPACE" : "CUBICLES"}</b></span><em>DROP TO INSTALL</em></div>}
+    {phase === "plan" && draggedDeveloper && developerDragPointer && (() => { const dev = getDeveloper(draggedDeveloper.devId); return <div aria-hidden="true" className="developer-drag-ghost" style={{ left: developerDragPointer.x, top: developerDragPointer.y, "--accent": dev.accent } as React.CSSProperties}><img src={dev.art} alt="" /><span><b>{dev.name}</b><small>{dev.role}</small></span><em>DROP ON A DESK</em></div>; })()}
 
     {plannerOpen && <Planner developers={placed} project={playerProject} plan={plan} setPlan={setPlan} onClose={() => setPlannerOpen(false)} onRun={resolveTurn} />}
     {projectModalOpen && <ProjectPicker projects={projects} activeProject={playerProject} onClaim={claimProject} onAbandon={abandon} onClose={() => setProjectModalOpen(false)} canEdit={phase === "plan"} />}
-    {inspectedDeveloper && <DeveloperDetails inspected={inspectedDeveloper} selected={inspectedDeveloper.handIndex !== undefined && selectedHand === inspectedDeveloper.handIndex} onClose={() => setInspectedDeveloper(null)} onSelect={inspectedDeveloper.handIndex === undefined || phase !== "plan" ? undefined : () => { setSelectedHand(selectedHand === inspectedDeveloper.handIndex ? null : inspectedDeveloper.handIndex!); setInspectedDeveloper(null); }} />}
+    {deckOpen && <DeckViewer deck={deck} remaining={phase === "setup" ? deck.length : deckRemaining} onClose={() => setDeckOpen(false)} onInspect={(devId) => setInspectedDeveloper({ devId })} />}
+    {inspectedDeveloper && <DeveloperDetails inspected={inspectedDeveloper} onClose={() => setInspectedDeveloper(null)} />}
     {phase === "gameover" && <div className="gameover-overlay"><div className={`gameover-card ${winner}`}><div className="burst" /><Trophy size={54} /><span>{winner === "player" ? "SHIP HAPPENS" : "PROD IS DOWN"}</span><h2>{winner === "player" ? "You shipped it." : "You burned out."}</h2><p>{winner === "player" ? "The rival lead has no sanity left. Take the win." : "Your sanity hit zero. The backlog wins this round."}</p><div><button className="primary-cta small" onClick={resetBattle}><RotateCcw size={17} /> Rematch</button><button className="secondary-cta" onClick={onExit}>Main menu</button></div></div></div>}
   </main>;
 }
@@ -532,17 +585,27 @@ function OfficeCard({ area, selected, dragging, onClick, onPointerDown, onPointe
   </button>;
 }
 
-function DrawPile({ remaining, total }: { remaining: number; total: number }) {
-  return <div className="draw-pile">
-    <div className="hand-label"><span><Layers3 size={15} /> DRAW PILE</span><small>{total} card deck</small></div>
+function DrawPile({ remaining, total, label = "DRAW PILE", onOpen }: { remaining: number; total: number; label?: string; onOpen: () => void }) {
+  return <button type="button" className="draw-pile" onClick={onOpen} aria-label={`Open ${label.toLowerCase()}`}>
+    <div className="hand-label"><span><Layers3 size={15} /> {label}</span><small>Click to inspect</small></div>
     <div className="draw-pile-body">
       <div className={`card-back-stack ${remaining ? "" : "empty"}`}><i /><i /><i><span>D<b>!</b></span></i></div>
-      <span><b>{remaining}</b><small>CARDS<br />REMAINING</small></span>
+      <span><b>{remaining}</b><small>{label === "YOUR DECK" ? `${total} CARD\nLOADOUT` : `CARDS\nREMAINING`}</small></span>
     </div>
-  </div>;
+  </button>;
 }
 
-function DeveloperDetails({ inspected, selected, onClose, onSelect }: { inspected: InspectedDeveloper; selected: boolean; onClose: () => void; onSelect?: () => void }) {
+function DeckViewer({ deck, remaining, onClose, onInspect }: { deck: string[]; remaining: number; onClose: () => void; onInspect: (devId: string) => void }) {
+  const counts = Object.fromEntries(DEVELOPERS.map((dev) => [dev.id, deck.filter((id) => id === dev.id).length]));
+  const roster = DEVELOPERS.filter((dev) => counts[dev.id]);
+  return <div className="modal-backdrop deck-viewer-backdrop" onClick={onClose}><section className="deck-viewer" onClick={(event) => event.stopPropagation()}>
+    <header><div><span className="eyebrow-small">CURRENT LOADOUT</span><h2>Your developer deck</h2><p>Review your roles and traits before committing office space. Click any card for its full profile.</p></div><div className="deck-viewer-count"><b>{deck.length}</b><small>TOTAL CARDS<br />{remaining} IN DRAW PILE</small></div><button onClick={onClose} aria-label="Close deck overview"><X size={18} /></button></header>
+    <div className="deck-viewer-grid">{roster.map((dev, index) => <button type="button" onClick={() => onInspect(dev.id)} className="deck-overview-card" key={dev.id} style={{ "--accent": dev.accent, "--deal-delay": `${index * 35}ms` } as React.CSSProperties}><div><img src={dev.art} alt={`${dev.name} portrait`} /><em>×{counts[dev.id]}</em></div><span><small>{dev.role}</small><b>{dev.name}</b><p>{dev.traitLabel}</p></span><span className="deck-overview-stats"><i><Brain size={12} /> {dev.completion}%</i><i><Shield size={12} /> {dev.sanity}</i></span></button>)}</div>
+    <footer><span><Layers3 size={15} /> {roster.length} unique developers · {deck.length}/20 cards</span><button className="primary-cta small" onClick={onClose}>Back to board</button></footer>
+  </section></div>;
+}
+
+function DeveloperDetails({ inspected, onClose }: { inspected: InspectedDeveloper; onClose: () => void }) {
   const dev = getDeveloper(inspected.devId);
   const currentSanity = inspected.placed?.sanity ?? dev.sanity;
   const workTypes = dev.role === "Full Stack" ? "Frontend + Backend" : dev.role;
@@ -558,7 +621,6 @@ function DeveloperDetails({ inspected, selected, onClose, onSelect }: { inspecte
       </div>
       <div className="detail-trait"><Sparkles size={20} /><span><small>SPECIAL TRAIT</small><b>{dev.traitLabel}</b><p>{dev.trait}</p></span></div>
       {inspected.owner && <div className={`detail-owner ${inspected.owner}`}><span>{inspected.owner === "enemy" ? "RIVAL TEAM" : "YOUR TEAM"}</span><small>Work Area {(inspected.placed?.slot ?? 0) + 1} · Desk {(inspected.placed?.position ?? 0) + 1}</small></div>}
-      {onSelect && <button className={`primary-cta detail-select ${selected ? "selected" : ""}`} onClick={onSelect}>{selected ? <Minus size={17} /> : <MousePointer2 size={17} />} {selected ? "Cancel deployment" : "Select for deployment"}</button>}
     </div>
   </section></div>;
 }
@@ -594,9 +656,9 @@ function ProjectPicker({ projects, activeProject, onClaim, onAbandon, onClose, c
   </section></div>;
 }
 
-function BoardSlotView({ slot, index, owner, selected, setupMode = false, selectedArea, draggedArea, dragOver = false, justPlaced = false, onDeploy, onConfigure, onInspect, highlight }: { slot: BoardSlot; index: number; owner: Owner; selected?: boolean; setupMode?: boolean; selectedArea?: AreaType | null; draggedArea?: AreaType | null; dragOver?: boolean; justPlaced?: boolean; onDeploy?: (position: number) => void; onConfigure?: (area: AreaType) => void; onInspect?: (placed: PlacedDev) => void; highlight?: ActionHighlight | null }) {
+function BoardSlotView({ slot, index, owner, setupMode = false, selectedArea, draggedArea, dragOver = false, draggedDeveloper, hoveredDeskPosition, justPlaced = false, onConfigure, onInspect, highlight }: { slot: BoardSlot; index: number; owner: Owner; setupMode?: boolean; selectedArea?: AreaType | null; draggedArea?: AreaType | null; dragOver?: boolean; draggedDeveloper?: { handIndex: number; devId: string } | null; hoveredDeskPosition?: number | null; justPlaced?: boolean; onConfigure?: (area: AreaType) => void; onInspect?: (placed: PlacedDev) => void; highlight?: ActionHighlight | null }) {
   const cap = slot.type === "open" ? 4 : slot.type === "cubicle" ? 2 : 0;
-  const readyForDev = !!slot.type && !!selected && slot.developers.length < cap;
+  const readyForDev = !!slot.type && !!draggedDeveloper && slot.developers.length < cap;
   const placeSelectedArea = () => { if (setupMode && selectedArea) onConfigure?.(selectedArea); };
   return <div data-setup-slot={setupMode ? index : undefined} data-drag-label={draggedArea ? `DROP ${draggedArea === "open" ? "OPEN SPACE" : "CUBICLES"} HERE` : undefined} className={`board-slot ${owner} ${slot.type ?? "unconfigured"} ${setupMode ? "setup-available" : ""} ${draggedArea ? "area-drag-target" : ""} ${dragOver ? "drag-over" : ""} ${justPlaced ? "area-just-placed" : ""}`} onClick={placeSelectedArea}>
     <div className="slot-header"><span>{slot.type === "open" ? <DoorOpen size={13} /> : slot.type === "cubicle" ? <LockKeyhole size={13} /> : <Layers3 size={13} />}{slot.type === "open" ? "OPEN SPACE" : slot.type === "cubicle" ? "CUBICLES" : "EMPTY BAY"}</span>{setupMode && slot.type && <em className="setup-edit">REPLACE</em>}<b>{slot.type ? `${slot.developers.length}/${cap}` : "—"}</b></div>
@@ -605,7 +667,7 @@ function BoardSlotView({ slot, index, owner, selected, setupMode = false, select
       if (placedDev) { const dev = getDeveloper(placedDev.devId); const targeted = highlight?.targetId === placedDev.instanceId; const acting = highlight?.actorId === placedDev.instanceId; return <button type="button" aria-label={`Inspect ${dev.name} at desk ${position + 1}`} className={`board-card ${targeted ? "targeted" : ""} ${acting ? `acting ${highlight?.kind}` : ""}`} onClick={(event) => { event.stopPropagation(); onInspect?.(placedDev); }} key={placedDev.instanceId} style={{ "--accent": dev.accent } as React.CSSProperties}>{targeted && <span className="target-marker">!</span>}{acting && <span className="action-marker">{highlight?.kind === "taunt" ? "💬" : "</>"}</span>}<span className="board-card-face"><img src={dev.art} alt={dev.name} /><span className="board-card-meta"><b>{dev.name}</b><span><Brain size={10} /> {placedDev.sanity}</span></span></span></button>; }
       if (position >= cap) return <div className="slot-blocked" key={`blocked-${position}`}><LockKeyhole size={12} /></div>;
       if (owner === "enemy") return <div className="slot-empty" key={`empty-${position}`}><Plus size={13} /></div>;
-      return <button type="button" aria-label={`Deploy selected developer to work area ${index + 1}, desk ${position + 1}`} className={`slot-empty ${readyForDev ? "deploy-target" : ""}`} disabled={!readyForDev} onClick={(event) => { event.stopPropagation(); onDeploy?.(position); }} key={`empty-${position}`}><Plus size={13} /><small>{readyForDev ? `DESK ${position + 1}` : ""}</small></button>;
+      return <div data-developer-desk={`${index}:${position}`} className={`slot-empty ${readyForDev ? "deploy-target" : ""} ${hoveredDeskPosition === position ? "developer-drag-over" : ""}`} key={`empty-${position}`}><Plus size={13} /><small>{hoveredDeskPosition === position ? "RELEASE" : readyForDev ? `DESK ${position + 1}` : ""}</small></div>;
     })}</div>}
     <div className="slot-number">0{index + 1}</div>
   </div>;
