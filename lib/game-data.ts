@@ -34,8 +34,31 @@ export type Project = {
   tasks: ProjectTask[];
 };
 
+export type CampaignLead = {
+  id: string;
+  level: number;
+  name: string;
+  title: string;
+  teamName: string;
+  initials: string;
+  art: string;
+  accent: string;
+  tagline: string;
+  backstory: string;
+  modifierLabel: string;
+  modifier: string;
+  signatureDeck: string[];
+  rewards: string[];
+  rotatingCards: number;
+  projectId: string;
+};
+
 export const DEVELOPERS: Developer[] = [
   { id: "chad", name: "Chad", role: "Frontend", completion: 48, sanity: 7, traitLabel: "Nepotism", trait: "In an open space, draw +1 developer at turn start.", quote: "My dad said this deploy is fine.", art: "/developers/chad-v2.png", accent: "#42d9ff" },
+  { id: "preston", name: "Preston", role: "Full Stack", completion: 84, sanity: 13, traitLabel: "Executive Sponsorship", trait: "Other family members in his open space gain +6% completion.", quote: "Merit is knowing who signs the roadmap.", art: "/developers/preston.png", accent: "#3a8cff" },
+  { id: "bryson", name: "Bryson", role: "Mobile", completion: 66, sanity: 9, traitLabel: "Bro Code", trait: "Gains +10% completion while sharing a slot with Chad.", quote: "Relax, bro. The app store review is basically QA.", art: "/developers/bryson.png", accent: "#69c7ff" },
+  { id: "blair", name: "Blair", role: "Frontend", completion: 76, sanity: 9, traitLabel: "Personal Brand", trait: "Her completed Frontend tasks add +1 MVP.", quote: "If the launch isn't photogenic, it didn't ship.", art: "/developers/blair.png", accent: "#4f7dff" },
+  { id: "basil", name: "Basil", role: "Backend", completion: 86, sanity: 12, traitLabel: "Damage Control", trait: "Coworkers in his slot take 1 less taunt damage.", quote: "I have quietly reverted the incident, sir.", art: "/developers/basil.png", accent: "#31b8e8" },
   { id: "fan", name: "Fan", role: "Backend", completion: 78, sanity: 10, traitLabel: "Superiority Complex", trait: "Takes 50% less taunt damage from Frontend developers.", quote: "Your CSS is not an architecture.", art: "/developers/fan.png", accent: "#ff427d" },
   { id: "aiden", name: "Aiden", role: "Full Stack", completion: 88, sanity: 6, traitLabel: "Deep Focus", trait: "Cannot enter open space. +8% completion in a cubicle.", quote: "…I already pushed the fix.", art: "/developers/aiden.png", accent: "#a26aff" },
   { id: "tigor", name: "Tigor", role: "Mobile", completion: 76, sanity: 12, traitLabel: "Spotter", trait: "Mobile tasks completed from his slot add +2 MVP.", quote: "One more rep. One more release.", art: "/developers/tigor.png", accent: "#ff8c35" },
@@ -47,6 +70,27 @@ export const DEVELOPERS: Developer[] = [
   { id: "nikko", name: "Nikko", role: "Backend", completion: 82, sanity: 7, traitLabel: "Night Owl", trait: "Gets +10% completion during sequences 3–4.", quote: "The servers are quieter at 2 AM.", art: "/developers/nikko.png", accent: "#9255ef" },
   { id: "valentina", name: "Valentina", role: "Full Stack", completion: 77, sanity: 11, traitLabel: "Pairing Energy", trait: "Coworkers in her open space gain +5% completion.", quote: "Two cursors, one clean commit.", art: "/developers/valentina.png", accent: "#2bd2cf" },
   { id: "omar", name: "Omar", role: "Mobile", completion: 68, sanity: 10, traitLabel: "Move Fast", trait: "First attempt gets +12%; a failure adds an extra mark.", quote: "Ship now. Patch elegantly later.", art: "/developers/omar.png", accent: "#f04455" }
+];
+
+export const CAMPAIGN_LEADS: CampaignLead[] = [
+  {
+    id: "preston-chadworth",
+    level: 1,
+    name: "Preston Chadworth",
+    title: "The Legacy Hire",
+    teamName: "CHADWORTH & SONS",
+    initials: "PC",
+    art: "/developers/preston.png",
+    accent: "#3a8cff",
+    tagline: "The org chart is a family tree.",
+    backstory: "Preston inherited a fund, a corner office, and the conviction that leadership is genetic. He staffed his delivery team from the family group chat—then hired Basil to make sure anything actually ships.",
+    modifierLabel: "Family Business",
+    modifier: "Preston boosts relatives in his open space. Expect high-synergy lanes and Basil cleaning up their mistakes.",
+    signatureDeck: ["preston", "chad", "bryson", "blair", "basil"],
+    rewards: ["bryson", "blair", "basil"],
+    rotatingCards: 7,
+    projectId: "creator-studio"
+  }
 ];
 
 export const PROJECTS: Project[] = [

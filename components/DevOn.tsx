@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ArrowLeft, BookOpen, Brain, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleHelp, Code2, DoorOpen, Hand, Home as HomeIcon, Layers3, LockKeyhole, Menu, Minus, MousePointer2, Play, Plus, RotateCcw, Settings, Shield, Sparkles, Swords, Ticket, Trophy, Users, Volume2, VolumeX, X, Zap, ZoomIn, ZoomOut } from "lucide-react";
 import { DevCard } from "./DevCard";
-import { DEVELOPERS, PROJECTS, ROLE_CHANCES, getDeveloper, type AreaType, type Developer, type Project, type ProjectTask } from "@/lib/game-data";
+import { CAMPAIGN_LEADS, DEVELOPERS, PROJECTS, ROLE_CHANCES, getDeveloper, type AreaType, type CampaignLead, type Developer, type Project, type ProjectTask } from "@/lib/game-data";
 import { playSfx, preloadSfx, stopAllSfx, type SoundEffect } from "@/lib/sound";
 
-type View = "home" | "deck" | "battle";
+type View = "home" | "deck" | "campaign" | "battle";
 type Owner = "player" | "enemy";
 type PlacedDev = { instanceId: string; devId: string; sanity: number; slot: number; position: number };
 type BoardSlot = { type: AreaType | null; developers: PlacedDev[] };
@@ -50,6 +50,24 @@ const emptySlots = (): BoardSlot[] => Array.from({ length: 4 }, () => ({ type: n
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
+function createEnemySlots(opponent: CampaignLead): BoardSlot[] {
+  const [lead, heir, brother, sister, fixer] = opponent.signatureDeck;
+  const placed = (devId: string, slot: number, position: number): PlacedDev => ({ instanceId: `cpu-${devId}`, devId, sanity: getDeveloper(devId).sanity, slot, position });
+  return [
+    { type: "open", developers: [placed(lead, 0, 0), placed(heir, 0, 1), placed(brother, 0, 2)] },
+    { type: "cubicle", developers: [] },
+    { type: "open", developers: [placed(sister, 2, 0), placed(fixer, 2, 1)] },
+    { type: "cubicle", developers: [] }
+  ];
+}
+
+function freshBattleProjects(opponent: CampaignLead): ProjectState[] {
+  const projects = freshProjects();
+  const rivalProject = projects.find((project) => project.id === opponent.projectId) ?? projects[1];
+  rivalProject.claimedBy = "enemy";
+  return projects;
+}
+
 function freshProjects(): ProjectState[] {
   return PROJECTS.map((p) => ({ ...p, claimedBy: null, completed: false, progress: 0, tasksState: Object.fromEntries(p.tasks.map((t) => [t.id, { completed: false, marks: 0 }])) }));
 }
@@ -72,23 +90,25 @@ function AppHeader({ onHome, onDeck, deckCount, inBattle = false }: { onHome: ()
 export function DevOn() {
   const [view, setView] = useState<View>("home");
   const [deck, setDeck] = useState<string[]>(starterDeck);
+  const [leadId, setLeadId] = useState(CAMPAIGN_LEADS[0].id);
+  const selectedLead = CAMPAIGN_LEADS.find((lead) => lead.id === leadId) ?? CAMPAIGN_LEADS[0];
 
-  if (view === "battle") return <Battle deck={deck.length ? deck : starterDeck} onExit={() => setView("home")} />;
+  if (view === "battle") return <Battle deck={deck.length ? deck : starterDeck} opponent={selectedLead} onExit={() => setView("campaign")} />;
 
   return <main className="app-shell">
     <AppHeader onHome={() => setView("home")} onDeck={() => setView("deck")} deckCount={deck.length} />
-    {view === "home" ? <Home onBattle={() => setView("battle")} onDeck={() => setView("deck")} deckCount={deck.length} /> : <DeckBuilder deck={deck} setDeck={setDeck} onBack={() => setView("home")} onBattle={() => setView("battle")} />}
+    {view === "home" ? <Home onCampaign={() => setView("campaign")} onDeck={() => setView("deck")} deckCount={deck.length} /> : view === "deck" ? <DeckBuilder deck={deck} setDeck={setDeck} onBack={() => setView("home")} onBattle={() => setView("campaign")} /> : <Campaign deck={deck} selectedLead={selectedLead} onSelectLead={setLeadId} onBack={() => setView("home")} onDeck={() => setView("deck")} onBattle={() => setView("battle")} />}
   </main>;
 }
 
-function Home({ onBattle, onDeck, deckCount }: { onBattle: () => void; onDeck: () => void; deckCount: number }) {
+function Home({ onCampaign, onDeck, deckCount }: { onCampaign: () => void; onDeck: () => void; deckCount: number }) {
   return <section className="home-screen">
     <div className="hero-copy">
       <div className="eyebrow"><span /> Tactical card battler <span /></div>
       <h1>BUILD A TEAM.<br /><em>BREAK PROD.</em></h1>
-      <p>Plan the sprint. Manage the egos. Ship the MVP before the other team steals your thunder.</p>
+      <p>Climb the Lead ladder. Plan each sprint, manage the egos, and ship the MVP before the boss&apos;s hand-picked team steals your thunder.</p>
       <div className="hero-actions">
-        <button className="primary-cta" onClick={onBattle}><Play fill="currentColor" size={19} /> Start a battle <span>vs. CPU</span></button>
+        <button className="primary-cta" onClick={onCampaign}><Trophy size={19} /> Start campaign <span>Choose a Lead</span></button>
         <button className="secondary-cta" onClick={onDeck}><Layers3 size={19} /> Edit deck <span>{deckCount}/20</span></button>
       </div>
       <div className="feature-row">
@@ -105,7 +125,65 @@ function Home({ onBattle, onDeck, deckCount }: { onBattle: () => void; onDeck: (
       <div className="floating-pill pill-a"><b>+18%</b><span>dependency bonus</span></div>
       <div className="floating-pill pill-b"><b>SHIP IT!</b><span>MVP reached</span></div>
     </div>
-    <footer className="home-footer"><span>v0.1 // LOCAL BUILD</span><span>12 DEVELOPERS · 6 PROJECTS</span></footer>
+    <footer className="home-footer"><span>v0.1 // LOCAL BUILD</span><span>{DEVELOPERS.length} DEVELOPERS · {PROJECTS.length} PROJECTS</span></footer>
+  </section>;
+}
+
+function Campaign({ deck, selectedLead, onSelectLead, onBack, onDeck, onBattle }: { deck: string[]; selectedLead: CampaignLead; onSelectLead: (id: string) => void; onBack: () => void; onDeck: () => void; onBattle: () => void }) {
+  const uniqueDevelopers = new Set(deck).size;
+  const roles = (["Frontend", "Backend", "Mobile", "Full Stack"] as const).map((role) => ({ role, count: deck.filter((id) => getDeveloper(id).role === role).length }));
+  const previewCards = deck.slice(0, 5).map((id) => getDeveloper(id));
+  const signature = selectedLead.signatureDeck.map((id) => getDeveloper(id));
+  const rewards = selectedLead.rewards.map((id) => getDeveloper(id));
+
+  return <section className="campaign-screen" style={{ "--lead": selectedLead.accent } as React.CSSProperties}>
+    <header className="campaign-heading">
+      <button className="back-btn" onClick={onBack}><ArrowLeft size={18} /> Main menu</button>
+      <div><span className="eyebrow-small">SINGLE-PLAYER CAMPAIGN</span><h1>Choose your <em>Lead</em></h1><p>Every boss brings a signature team, a battle modifier, and a different reward pool.</p></div>
+      <div className="campaign-progress"><small>LEAD LADDER</small><b>01 <span>/ 06</span></b></div>
+    </header>
+
+    <nav className="campaign-levels" aria-label="Campaign levels">
+      {[1, 2, 3, 4, 5, 6].map((level) => {
+        const lead = CAMPAIGN_LEADS.find((candidate) => candidate.level === level);
+        return <button key={level} className={selectedLead.level === level ? "active" : ""} disabled={!lead} onClick={() => lead && onSelectLead(lead.id)}><span>{String(level).padStart(2, "0")}</span><small>{lead ? lead.title : "Classified"}</small>{!lead && <LockKeyhole size={12} />}</button>;
+      })}
+    </nav>
+
+    <div className="campaign-layout">
+      <aside className="campaign-player-panel attached-panel">
+        <div className="campaign-panel-label"><span>YOUR LOADOUT</span><small>LOCALHOST</small></div>
+        <div className="campaign-player-id"><span>YO</span><div><b>Ready to ship</b><small>{uniqueDevelopers} unique developers</small></div></div>
+        <div className="campaign-deck-total"><span><Layers3 size={15} /> DECK TOTAL</span><b>{deck.length}<small>/20</small></b><Meter value={deck.length} max={20} /></div>
+        <div className="campaign-role-counts">{roles.map(({ role, count }) => <span key={role}><small>{role === "Full Stack" ? "FULL" : role.toUpperCase()}</small><b>{count}</b></span>)}</div>
+        <div className="campaign-mini-deck" aria-label="Top cards in your deck">{previewCards.map((dev, index) => <img key={`${dev.id}-${index}`} src={dev.art} alt={dev.name} style={{ "--card-index": index } as React.CSSProperties} />)}</div>
+        <div className="campaign-deck-notes"><span><b>5</b><small>OPENING HAND</small></span><span><b>1</b><small>DRAW / TURN</small></span></div>
+        <button className="campaign-edit-deck" onClick={onDeck}><Layers3 size={15} /> Edit deck <ChevronRight size={14} /></button>
+      </aside>
+
+      <article className="campaign-lead-dossier">
+        <div className="lead-portrait-stage">
+          <span className="lead-halo" aria-hidden="true" /><img src={selectedLead.art} alt={`${selectedLead.name}, ${selectedLead.title}`} />
+          <span className="lead-boss-crown"><Trophy size={18} /> LEAD {String(selectedLead.level).padStart(2, "0")}</span>
+          <div className="lead-nameplate"><small>{selectedLead.teamName}</small><h2>{selectedLead.name}</h2><b>{selectedLead.title}</b></div>
+        </div>
+        <div className="lead-intel">
+          <span className="lead-tagline">“{selectedLead.tagline}”</span>
+          <p>{selectedLead.backstory}</p>
+          <div className="lead-modifier"><Sparkles size={20} /><span><small>ENCOUNTER MODIFIER</small><b>{selectedLead.modifierLabel}</b><p>{selectedLead.modifier}</p></span></div>
+          <div className="lead-roster-heading"><span>SIGNATURE DECK</span><small>5 FAMILY CARDS + {selectedLead.rotatingCards} ROTATING</small></div>
+          <div className="lead-roster">{signature.map((dev, index) => <button key={dev.id} style={{ "--accent": dev.accent, "--roster-index": index } as React.CSSProperties} title={`${dev.name}: ${dev.traitLabel}`}><img src={dev.art} alt={dev.name} /><span><b>{dev.name}</b><small>{dev.traitLabel}</small></span></button>)}</div>
+        </div>
+      </article>
+
+      <aside className="campaign-rewards-panel attached-panel">
+        <div className="campaign-panel-label"><span>POSSIBLE REWARDS</span><small>WIN THE SPRINT</small></div>
+        <p>Defeat this Lead for one card from the themed reward cache.</p>
+        <div className="reward-cards">{rewards.map((dev, index) => <div key={dev.id} className="reward-card" style={{ "--accent": dev.accent, "--reward-index": index } as React.CSSProperties}><img src={dev.art} alt={dev.name} /><span><small>{dev.role}</small><b>{dev.name}</b><em>{dev.traitLabel}</em></span></div>)}</div>
+        <div className="campaign-stakes"><Shield size={17} /><span><b>30 SANITY</b><small>One battle · no continues</small></span></div>
+        <button className="campaign-fight-button" onClick={onBattle}><Swords size={20} /><span><b>FACE THE LEAD</b><small>Start Level {String(selectedLead.level).padStart(2, "0")}</small></span><ChevronRight /></button>
+      </aside>
+    </div>
   </section>;
 }
 
@@ -138,17 +216,12 @@ function DeckBuilder({ deck, setDeck, onBack, onBattle }: { deck: string[]; setD
   </section>;
 }
 
-function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
+function Battle({ deck, opponent, onExit }: { deck: string[]; opponent: CampaignLead; onExit: () => void }) {
   const shuffledDeck = useRef([...deck].sort(() => Math.random() - .5));
   const [drawIndex, setDrawIndex] = useState(5);
   const [hand, setHand] = useState<string[]>(shuffledDeck.current.slice(0, 5));
   const [playerSlots, setPlayerSlots] = useState<BoardSlot[]>(emptySlots());
-  const [enemySlots, setEnemySlots] = useState<BoardSlot[]>([
-    { type: "open", developers: [{ instanceId: "cpu-fan", devId: "fan", sanity: 10, slot: 0, position: 0 }, { instanceId: "cpu-omar", devId: "omar", sanity: 10, slot: 0, position: 1 }] },
-    { type: "cubicle", developers: [{ instanceId: "cpu-aiden", devId: "aiden", sanity: 6, slot: 1, position: 0 }] },
-    { type: "open", developers: [{ instanceId: "cpu-wendy", devId: "wendy", sanity: 9, slot: 2, position: 0 }] },
-    { type: "cubicle", developers: [] }
-  ]);
+  const [enemySlots, setEnemySlots] = useState<BoardSlot[]>(() => createEnemySlots(opponent));
   const [deckOpen, setDeckOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuHelpOpen, setMenuHelpOpen] = useState(false);
@@ -162,7 +235,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
   const [developerDragPointer, setDeveloperDragPointer] = useState<{ x: number; y: number } | null>(null);
   const [hoveredDesk, setHoveredDesk] = useState<{ slotIndex: number; position: number } | null>(null);
   const [lastAreaInstall, setLastAreaInstall] = useState<{ slot: number; key: number } | null>(null);
-  const [projects, setProjects] = useState<ProjectState[]>(() => { const ps = freshProjects(); ps[1].claimedBy = "enemy"; return ps; });
+  const [projects, setProjects] = useState<ProjectState[]>(() => freshBattleProjects(opponent));
   const [playerSanity, setPlayerSanity] = useState(30);
   const [enemySanity, setEnemySanity] = useState(30);
   const [turn, setTurn] = useState(1);
@@ -494,6 +567,8 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     if (dev.id === "omar" && sequence === 1) chance += 12;
     if (coworkers.includes("stewart") && dev.id !== "stewart") chance -= 8;
     if (coworkers.includes("valentina") && dev.id !== "valentina" && slots[instance.slot].type === "open") chance += 5;
+    if (coworkers.includes("preston") && ["chad", "bryson", "blair"].includes(dev.id) && slots[instance.slot].type === "open") chance += 6;
+    if (dev.id === "bryson" && coworkers.includes("chad")) chance += 10;
     return clamp(chance, 5, 96);
   };
 
@@ -587,6 +662,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
         const coworkers = actorSlots[actor.slot].developers.map((d) => d.devId);
         if (task.type === "Mobile" && coworkers.includes("tigor")) points += 2;
         if (task.type === "Frontend" && coworkers.includes("zara")) points += 1;
+        if (task.type === "Frontend" && dev.id === "blair") points += 1;
         project.progress = Math.min(project.mvp, project.progress + points);
         message = `${dev.name} shipped ${task.title} · +${points} MVP`;
         if (project.progress >= project.mvp) {
@@ -632,6 +708,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       let damage = baseDamage;
       if (target?.devId === "fan" && dev.role === "Frontend") damage = Math.max(1, Math.floor(damage / 2));
       if (target && targetSlot.developers.some((candidate) => candidate.devId === "wendy")) damage = Math.max(1, damage - 1);
+      if (target && targetSlot.developers.some((candidate) => candidate.devId === "basil")) damage = Math.max(1, damage - 1);
       const key = ++stageKey;
       const baseStage: ActionStage = { key, sequence, owner, actor: { ...actor }, kind: "taunt", phase: "intro", message: `${dev.name} winds up a taunt…`, target: targetSnapshot, targetIsLead: !target, targetSanityBefore: before, targetSanityAfter: before, damage };
       setHighlight({ actorId: actor.instanceId, targetId: target?.instanceId ?? leadId, kind: "taunt" });
@@ -775,15 +852,9 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     setDrawIndex(5);
     setHand(shuffledDeck.current.slice(0, 5));
     setPlayerSlots(emptySlots());
-    setEnemySlots([
-      { type: "open", developers: [{ instanceId: "cpu-fan", devId: "fan", sanity: 10, slot: 0, position: 0 }, { instanceId: "cpu-omar", devId: "omar", sanity: 10, slot: 0, position: 1 }] },
-      { type: "cubicle", developers: [{ instanceId: "cpu-aiden", devId: "aiden", sanity: 6, slot: 1, position: 0 }] },
-      { type: "open", developers: [{ instanceId: "cpu-wendy", devId: "wendy", sanity: 9, slot: 2, position: 0 }] },
-      { type: "cubicle", developers: [] }
-    ]);
+    setEnemySlots(createEnemySlots(opponent));
     setDeckOpen(false); setMenuOpen(false); setMenuHelpOpen(false); setUnemployment([]); setSelectedArea(null); endAreaDrag(); endDeveloperDrag(); setLastAreaInstall(null); setTurnDrawEvent(null); setHandArrival(null);
-    const nextProjects = freshProjects();
-    nextProjects[1].claimedBy = "enemy";
+    const nextProjects = freshBattleProjects(opponent);
     setProjects(nextProjects);
     setPlayerSanity(30); setEnemySanity(30); setTurn(1); setCameraX(0); setCameraTilt(52); setCameraZoom(1);
     setPlannerOpen(false); setSprintConfirmOpen(false); setProjectModalOpen(false); setProjectNudge(null); setBragNudge(null); setPlan({}); setPhase("setup"); setBrags([]);
@@ -797,7 +868,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       <div className="hud-stack player-hud-stack"><PlayerHud owner="player" name="YOU // LOCALHOST" sanity={playerSanity} max={30} project={playerProject} targeted={highlight?.targetId === "player-lead"} /></div>
       <div className={`turn-pill ${phase === "setup" ? "setup" : ""}`}><span>{phase === "setup" ? "OFFICE" : "SPRINT"}</span><b>{phase === "setup" ? `${configuredAreas}/4` : String(turn).padStart(2, "0")}</b><small>{phase === "setup" ? "LAYOUT SETUP" : phase === "resolving" ? `SEQUENCE ${seqActive ?? 1}/${SEQUENCE_COUNT}` : phase === "brag" ? "BRAG WINDOW" : "PLANNING"}</small></div>
       <div className="hud-stack enemy-hud-stack">
-        <PlayerHud owner="enemy" name="NULL POINTERS" sanity={enemySanity} max={30} project={enemyProject} targeted={highlight?.targetId === "enemy-lead"} />
+        <PlayerHud owner="enemy" name={opponent.teamName} avatarText={opponent.initials} sanity={enemySanity} max={30} project={enemyProject} targeted={highlight?.targetId === "enemy-lead"} />
         <button type="button" className={`hud-brag-button ${brags.length ? "armed" : "locked"} ${phase === "brag" ? "ready" : ""}`} onClick={tryUseBrag} aria-label={brags.length ? `Use Brag. ${brags.length} available.` : "Brag locked. Complete a project first."}>
           <img src="/ui/brag-burst.png" alt="" />
           {!brags.length && <span><LockKeyhole size={10} /> LOCKED</span>}
@@ -934,11 +1005,11 @@ function DeveloperDetails({ inspected, onClose }: { inspected: InspectedDevelope
   </section></div>;
 }
 
-function PlayerHud({ owner, name, sanity, max, project, targeted = false }: { owner: Owner; name: string; sanity: number; max: number; project?: ProjectState; targeted?: boolean }) {
+function PlayerHud({ owner, name, sanity, max, project, avatarText, targeted = false }: { owner: Owner; name: string; sanity: number; max: number; project?: ProjectState; avatarText?: string; targeted?: boolean }) {
   const rain = owner === "player" ? ["01", "</>", "npm", "101", "git", "{}", "dev", "011"] : ["ERR", "404", "NULL", "010", "BUG", "!", "500", "ptr"];
   return <div className={`player-hud ${owner} ${targeted ? "targeted" : ""}`}>
     <span className="matrix-rain" aria-hidden="true">{rain.map((glyphs, index) => <i key={`${glyphs}-${index}`} style={{ "--matrix-x": `${6 + index * 12}%`, "--matrix-delay": `${-index * .47}s`, "--matrix-speed": `${2.9 + index % 3 * .7}s` } as React.CSSProperties}>{glyphs}</i>)}</span>
-    {targeted && <span className="hud-target">!</span>}<div className="avatar">{owner === "player" ? "YO" : "NP"}<i /></div><div className="hud-copy"><span>{name}</span><div><Brain size={14} /><b>{sanity}</b><small> / {max} SANITY</small></div><Meter value={sanity} max={max} tone={owner === "enemy" ? "pink" : "cyan"} /></div>
+    {targeted && <span className="hud-target">!</span>}<div className="avatar">{avatarText ?? (owner === "player" ? "YO" : "NP")}<i /></div><div className="hud-copy"><span>{name}</span><div><Brain size={14} /><b>{sanity}</b><small> / {max} SANITY</small></div><Meter value={sanity} max={max} tone={owner === "enemy" ? "pink" : "cyan"} /></div>
   </div>;
 }
 
