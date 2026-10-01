@@ -513,9 +513,9 @@ body { overflow-x:hidden; }
 .enemy-hud-stack { grid-area:enemy;justify-self:end; }
 .player-hud-stack { grid-area:player;justify-self:start; }
 .turn-pill { grid-area:turn; }
-.hud-brag-button { position:absolute;z-index:28;right:82px;top:59px;width:108px;height:62px;padding:0;border:0;background:transparent;display:grid;place-items:center;cursor:pointer;transition:opacity .2s,filter .2s,transform .2s; }
+.hud-brag-button { position:absolute;z-index:28;right:-45px;top:75px;width:184px;height:116px;padding:0;border:0;background:transparent;display:grid;place-items:center;cursor:pointer;transition:opacity .2s,filter .2s,transform .2s; }
 .hud-brag-button:before { content:"";position:absolute;z-index:-1;left:50%;top:-11px;width:34px;height:15px;transform:translateX(-50%);border-left:2px solid #506575;border-right:2px solid #506575;opacity:.78; }
-.hud-brag-button img { width:106px;max-height:68px;display:block;object-fit:contain; }
+.hud-brag-button img { width:182px;max-height:114px;display:block;object-fit:contain; }
 .hud-brag-button.locked { opacity:.44;filter:grayscale(1) brightness(.64); }
 .hud-brag-button.locked:hover { opacity:.76;filter:grayscale(.45) brightness(.86);transform:translateY(2px); }
 .hud-brag-button>span { position:absolute;left:50%;bottom:-3px;transform:translateX(-50%);display:flex;align-items:center;gap:3px;padding:3px 7px;border:1px solid #4c6170;border-radius:999px;background:#0a151ee8;color:#8da1af;font:800 6px DM Mono;letter-spacing:.1em;white-space:nowrap; }
@@ -545,9 +545,9 @@ body { overflow-x:hidden; }
 .stage-empty-ticket.completed-ticket b { color:#e8ffc5; }
 
 @media (max-width:760px) {
-  .hud-brag-button { right:2px;top:60px;transform:scale(.82);transform-origin:top right; }
-  .hud-brag-button.locked:hover { transform:translateY(2px) scale(.82); }
-  .hud-brag-button.armed:hover { transform:translateY(-3px) scale(.86); }
+  .hud-brag-button { right:-18px;top:60px;transform:scale(.62);transform-origin:top right; }
+  .hud-brag-button.locked:hover { transform:translateY(2px) scale(.62); }
+  .hud-brag-button.armed:hover { transform:translateY(-3px) scale(.67); }
   .brag-required-warning>img { width:62px; }
 }
 
