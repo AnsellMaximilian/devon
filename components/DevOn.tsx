@@ -815,7 +815,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
         <div className="battle-actions">
           {phase === "plan" && <div className="sprint-controls"><button className="sprint-button" onClick={openSprintConfirmation} aria-label="Run sprint and end turn"><img src="/ui/sprint-button.png" alt="" /><span>SPRINT!</span></button><button className="plan-queue-button" onClick={openSprintPlanner}><Ticket size={15} /><span>PLAN</span><em>{plannedActions}</em></button></div>}
           {phase === "resolving" && <div className="resolving-button"><span className="spinner" /><div><b>SPRINT IN PROGRESS</b><small>Actions resolve in sequence</small></div></div>}
-          {phase === "brag" && <><button className="brag-button" onClick={useBrag}><Sparkles /><span>BRAG!</span>{brags.length > 1 && <em>{brags.length}</em>}</button><button className="skip-button" onClick={skipBrag}>Skip</button></>}
+          {phase === "brag" && <><button className="brag-button" onClick={useBrag} aria-label="Use Brag"><img src="/ui/brag-burst.png" alt="" />{brags.length > 1 && <em>{brags.length}</em>}</button><button className="skip-button" onClick={skipBrag}>Skip</button></>}
         </div>
     </div></div>}
 
