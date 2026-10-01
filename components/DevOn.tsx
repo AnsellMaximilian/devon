@@ -573,8 +573,8 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     </div>
 
     {phase === "setup" ? <div className="setup-console-spacer" aria-hidden="true" /> : <div className="project-console">
-      {playerProject ? <button className="active-project-card" onClick={() => setProjectModalOpen(true)} style={{ "--project": playerProject.accent } as React.CSSProperties}>
-        <span className="project-icon"><BriefcaseBusiness size={17} /></span><span><b>{playerProject.name}</b><small>{playerProject.tasks.filter((t) => playerProject.tasksState[t.id].completed).length}/{playerProject.tasks.length} TASKS · {playerProject.progress}/{playerProject.mvp} MVP</small></span><Meter value={playerProject.progress} max={playerProject.mvp} tone="lime" /><em>VIEW PLAN</em>
+      {playerProject ? <button className="active-project-card" onClick={() => setProjectModalOpen(true)} style={{ "--project": playerProject.accent, "--project-progress": `${clamp((playerProject.progress / playerProject.mvp) * 100, 0, 100)}%` } as React.CSSProperties}>
+        <span className="project-icon"><BriefcaseBusiness size={16} /></span><span className="active-project-name"><b>{playerProject.name}</b><small>{playerProject.progress}/{playerProject.mvp} MVP</small></span><em>{playerProject.tasks.filter((t) => playerProject.tasksState[t.id].completed).length}/{playerProject.tasks.length} TASKS</em><ChevronRight size={14} />
       </button> : <button className={`select-project-button ${projectNudge ? "needs-attention" : ""}`} onClick={openProjectPicker} disabled={phase !== "plan"}><Plus size={16} /><span><b>Select a project</b><small>Review scope before committing</small></span><ChevronRight size={16} /></button>}
       {projectNudge && <img key={projectNudge} className="project-pointer" src="/ui/project-cursor.png" alt="" aria-hidden="true" />}
     </div>}
