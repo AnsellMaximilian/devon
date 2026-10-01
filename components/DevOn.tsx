@@ -142,6 +142,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
   const [cameraTilt, setCameraTilt] = useState(52);
   const [cameraZoom, setCameraZoom] = useState(1);
   const [plannerOpen, setPlannerOpen] = useState(false);
+  const [sprintConfirmOpen, setSprintConfirmOpen] = useState(false);
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [projectNudge, setProjectNudge] = useState<number | null>(null);
   const [plan, setPlan] = useState<Record<string, PlannedAction>>({});
@@ -166,6 +167,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
   const configuredAreas = playerSlots.filter((slot) => slot.type).length;
   const setupReady = configuredAreas === 4;
   const deckRemaining = Math.max(0, shuffledDeck.current.length - drawIndex);
+  const plannedActions = Object.values(plan).filter((action) => action !== "skip").length;
 
   useEffect(() => {
     if (!announcement) return;
@@ -370,6 +372,22 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     setPlannerOpen(true);
   };
 
+  const openSprintConfirmation = () => {
+    if (phase !== "plan") return;
+    if (!playerProject) {
+      setProjectNudge(Date.now());
+      setEvent("Select a project before launching this sprint.");
+      setEventTone("bad");
+      return;
+    }
+    if (!placed.length) {
+      setEvent("Deploy at least one developer before launching the sprint.");
+      setEventTone("bad");
+      return;
+    }
+    setSprintConfirmOpen(true);
+  };
+
   const completionChance = (dev: Developer, taskId: string, project: ProjectState, slots: BoardSlot[], instance: PlacedDev, sequence: number) => {
     const task = project.tasks.find((t) => t.id === taskId)!;
     const roleBonus = ROLE_CHANCES[dev.role][task.type] ?? -100;
@@ -414,7 +432,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     if (!playerProject) { setEvent("Claim a project before running the sprint."); setEventTone("bad"); setPlannerOpen(false); return; }
     if (playerSlots.some((slot) => !slot.type)) { setEvent("Install all four work-area cards before running the sprint."); setEventTone("bad"); setPlannerOpen(false); return; }
     if (!placed.length) { setEvent("Deploy at least one developer first."); setEventTone("bad"); setPlannerOpen(false); return; }
-    setPlannerOpen(false); setPhase("resolving");
+    setPlannerOpen(false); setSprintConfirmOpen(false); setPhase("resolving");
     let pSlots = playerSlots.map((s) => ({ ...s, developers: s.developers.map((d) => ({ ...d })) }));
     let eSlots = enemySlots.map((s) => ({ ...s, developers: s.developers.map((d) => ({ ...d })) }));
     let ps = projects.map((p) => ({ ...p, tasksState: Object.fromEntries(Object.entries(p.tasksState).map(([k, v]) => [k, { ...v }])) }));
@@ -541,7 +559,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     nextProjects[1].claimedBy = "enemy";
     setProjects(nextProjects);
     setPlayerSanity(30); setEnemySanity(30); setTurn(1); setCameraX(0); setCameraTilt(52); setCameraZoom(1);
-    setPlannerOpen(false); setProjectModalOpen(false); setProjectNudge(null); setPlan({}); setPhase("setup"); setBrags([]);
+    setPlannerOpen(false); setSprintConfirmOpen(false); setProjectModalOpen(false); setProjectNudge(null); setPlan({}); setPhase("setup"); setBrags([]);
     setWinner(null); setSeqActive(null); setHighlight(null); setInspectedDeveloper(null); setEventTone("neutral");
     setAnnouncement({ key: Date.now(), title: "OFFICE SETUP", subtitle: "Build your workspace before the first sprint", tone: "lime" });
     setEvent("Set up your office before the first sprint begins.");
@@ -555,12 +573,10 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     </div>
 
     {phase === "setup" ? <div className="setup-console-spacer" aria-hidden="true" /> : <div className="project-console">
-      <div className="project-console-label"><BriefcaseBusiness size={15} /><span>ACTIVE PROJECT</span></div>
       {playerProject ? <button className="active-project-card" onClick={() => setProjectModalOpen(true)} style={{ "--project": playerProject.accent } as React.CSSProperties}>
         <span className="project-icon"><BriefcaseBusiness size={17} /></span><span><b>{playerProject.name}</b><small>{playerProject.tasks.filter((t) => playerProject.tasksState[t.id].completed).length}/{playerProject.tasks.length} TASKS · {playerProject.progress}/{playerProject.mvp} MVP</small></span><Meter value={playerProject.progress} max={playerProject.mvp} tone="lime" /><em>VIEW PLAN</em>
       </button> : <button className={`select-project-button ${projectNudge ? "needs-attention" : ""}`} onClick={openProjectPicker} disabled={phase !== "plan"}><Plus size={16} /><span><b>Select a project</b><small>Review scope before committing</small></span><ChevronRight size={16} /></button>}
-      {projectNudge && <img key={projectNudge} className="project-pointer" src="/ui/project-pointer.png" alt="" aria-hidden="true" />}
-      <span className="project-console-tip">Shared backlog hidden until you choose · claims are exclusive</span>
+      {projectNudge && <img key={projectNudge} className="project-pointer" src="/ui/project-cursor.png" alt="" aria-hidden="true" />}
     </div>}
 
     <div className={`board-viewport ${phase === "setup" ? "setup-board" : ""}`}>
@@ -589,23 +605,24 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       {phase === "resolving" && <div className={`event-banner ${eventTone}`}><small>SEQUENCE {seqActive}/8</small><b>{event}</b></div>}
     </div>
 
-    {phase !== "setup" && <div className="battle-dock">
+    {phase !== "setup" && <div className="battle-dock"><div className="bottom-command-panel">
         <div className="pile-rack">
           <DrawPile remaining={deckRemaining} total={shuffledDeck.current.length} onOpen={() => setDeckOpen(true)} />
           <UnemploymentPile developers={unemployment} />
         </div>
         <div className="hand-zone"><div className="hand-label"><span><Hand size={15} /> DEVELOPER HAND</span><small>Click to inspect · drag onto an exact desk</small></div><div className="hand-cards fanned">{hand.map((id, i) => { const dev = getDeveloper(id); const offset = i - (hand.length - 1) / 2; return <div className={`hand-drag-card ${draggedDeveloper?.handIndex === i ? "dragging" : ""}`} style={{ "--fan-angle": `${offset * 3.5}deg`, "--fan-y": `${Math.abs(offset) * 3}px`, zIndex: i + 1 } as React.CSSProperties} onClick={() => inspectHandDeveloper(id, i)} onPointerDown={(event) => startDeveloperPointer(event, i, id)} onPointerMove={moveDeveloperPointer} onPointerUp={finishDeveloperPointer} onPointerCancel={cancelDeveloperPointer} key={`${id}-${i}`}><DevCard dev={dev} compact /></div>; })}{Array.from({ length: Math.max(0, 5 - hand.length) }).map((_, i) => <div className="empty-hand" key={i}><Code2 /></div>)}</div></div>
         <div className="battle-actions">
-          {phase === "plan" && <button className="plan-button" onClick={openSprintPlanner}><Ticket size={27} /><span><b>PLAN SPRINT</b><small>Assign up to 8 sequences</small></span><ChevronRight /></button>}
+          {phase === "plan" && <div className="sprint-controls"><button className="sprint-button" onClick={openSprintConfirmation} aria-label="Run sprint and end turn"><img src="/ui/sprint-button.png" alt="" /><span>SPRINT!</span></button><button className="plan-queue-button" onClick={openSprintPlanner}><Ticket size={15} /><span>PLAN</span><em>{plannedActions}</em></button></div>}
           {phase === "resolving" && <div className="resolving-button"><span className="spinner" /><div><b>SPRINT IN PROGRESS</b><small>Actions resolve in sequence</small></div></div>}
           {phase === "brag" && <><button className="brag-button" onClick={useBrag}><Sparkles /><span>BRAG!</span>{brags.length > 1 && <em>{brags.length}</em>}</button><button className="skip-button" onClick={skipBrag}>Skip</button></>}
         </div>
-    </div>}
+    </div></div>}
 
     {phase === "setup" && draggedArea && dragPointer && <div aria-hidden="true" className={`setup-drag-ghost ${draggedArea}`} style={{ left: dragPointer.x, top: dragPointer.y }}><img src={draggedArea === "open" ? "/areas/open-space.png" : "/areas/cubicles.png"} alt="" /><span>{draggedArea === "open" ? <DoorOpen size={15} /> : <LockKeyhole size={15} />}<b>{draggedArea === "open" ? "OPEN SPACE" : "CUBICLES"}</b></span><em>DROP TO INSTALL</em></div>}
     {phase === "plan" && draggedDeveloper && developerDragPointer && (() => { const dev = getDeveloper(draggedDeveloper.devId); return <div aria-hidden="true" className="developer-drag-ghost" style={{ left: developerDragPointer.x, top: developerDragPointer.y, "--accent": dev.accent } as React.CSSProperties}><img src={dev.art} alt="" /><span><b>{dev.name}</b><small>{dev.role}</small></span><em>DROP ON A DESK</em></div>; })()}
 
-    {plannerOpen && <Planner developers={placed} project={playerProject} plan={plan} setPlan={setPlan} onClose={() => setPlannerOpen(false)} onRun={resolveTurn} />}
+    {plannerOpen && <Planner developers={placed} project={playerProject} plan={plan} setPlan={setPlan} onClose={() => setPlannerOpen(false)} onSave={() => setPlannerOpen(false)} />}
+    {sprintConfirmOpen && <SprintConfirmation turn={turn} project={playerProject} plannedActions={plannedActions} onCancel={() => setSprintConfirmOpen(false)} onConfirm={resolveTurn} />}
     {projectModalOpen && <ProjectPicker projects={projects} activeProject={playerProject} onClaim={claimProject} onAbandon={abandon} onClose={() => setProjectModalOpen(false)} canEdit={phase === "plan"} />}
     {deckOpen && <DeckViewer deck={deck} remaining={phase === "setup" ? deck.length : deckRemaining} onClose={() => setDeckOpen(false)} onInspect={(devId) => setInspectedDeveloper({ devId })} />}
     {inspectedDeveloper && <DeveloperDetails inspected={inspectedDeveloper} onClose={() => setInspectedDeveloper(null)} />}
@@ -645,7 +662,7 @@ function UnemploymentPile({ developers }: { developers: string[] }) {
   const names = developers.map((id) => getDeveloper(id).name).join(", ");
   return <div className={`unemployment-pile ${developers.length ? "occupied" : ""}`} aria-label={`${developers.length} developers in unemployment${names ? `: ${names}` : ""}`} title={names || "No developers have quit"}>
     <span className="pile-label"><BriefcaseBusiness size={13} /><b>UNEMPLOYMENT</b></span>
-    <span className="pile-visual"><span className={`card-back-stack unemployment ${developers.length ? "" : "empty"}`}><i><img src="/cards/dev-on-card-back.png" alt="" /></i><i><img src="/cards/dev-on-card-back.png" alt="" /></i><i><img src="/cards/dev-on-card-back.png" alt="" /></i></span><strong className="pile-badge right">{developers.length}</strong></span>
+    <span className="pile-visual"><span className={`card-back-stack unemployment ${developers.length ? "" : "empty"}`}><i><img src="/cards/unemployment-card-back.png" alt="" /></i><i><img src="/cards/unemployment-card-back.png" alt="" /></i><i><img src="/cards/unemployment-card-back.png" alt="" /></i></span><strong className="pile-badge right">{developers.length}</strong></span>
     <small>{developers.length ? "OUT OF THE GAME" : "NO QUITTERS"}</small>
   </div>;
 }
@@ -681,7 +698,11 @@ function DeveloperDetails({ inspected, onClose }: { inspected: InspectedDevelope
 }
 
 function PlayerHud({ owner, name, sanity, max, project, targeted = false }: { owner: Owner; name: string; sanity: number; max: number; project?: ProjectState; targeted?: boolean }) {
-  return <div className={`player-hud ${owner} ${targeted ? "targeted" : ""}`}>{targeted && <span className="hud-target">!</span>}<div className="avatar">{owner === "player" ? "YO" : "NP"}<i /></div><div className="hud-copy"><span>{name}</span><div><Brain size={14} /><b>{sanity}</b><small> / {max} SANITY</small></div><Meter value={sanity} max={max} tone={owner === "enemy" ? "pink" : "cyan"} />{project && <em>{project.name} · {project.progress}/{project.mvp} MVP</em>}</div></div>;
+  const rain = owner === "player" ? ["01", "</>", "npm", "101", "git", "{}", "dev", "011"] : ["ERR", "404", "NULL", "010", "BUG", "!", "500", "ptr"];
+  return <div className={`player-hud ${owner} ${targeted ? "targeted" : ""}`}>
+    <span className="matrix-rain" aria-hidden="true">{rain.map((glyphs, index) => <i key={`${glyphs}-${index}`} style={{ "--matrix-x": `${6 + index * 12}%`, "--matrix-delay": `${-index * .47}s`, "--matrix-speed": `${2.9 + index % 3 * .7}s` } as React.CSSProperties}>{glyphs}</i>)}</span>
+    {targeted && <span className="hud-target">!</span>}<div className="avatar">{owner === "player" ? "YO" : "NP"}<i /></div><div className="hud-copy"><span>{name}</span><div><Brain size={14} /><b>{sanity}</b><small> / {max} SANITY</small></div><Meter value={sanity} max={max} tone={owner === "enemy" ? "pink" : "cyan"} /></div>
+  </div>;
 }
 
 function ProjectPicker({ projects, activeProject, onClaim, onAbandon, onClose, canEdit }: { projects: ProjectState[]; activeProject?: ProjectState; onClaim: (id: string) => void; onAbandon: () => void; onClose: () => void; canEdit: boolean }) {
@@ -717,10 +738,9 @@ function BoardSlotView({ slot, index, owner, setupMode = false, selectedArea, dr
   const placeSelectedArea = () => { if (setupMode && selectedArea) onConfigure?.(selectedArea); };
   return <div data-setup-slot={setupMode ? index : undefined} data-drag-label={draggedArea ? `DROP ${draggedArea === "open" ? "OPEN SPACE" : "CUBICLES"} HERE` : undefined} className={`board-slot ${owner} ${slot.type ?? "unconfigured"} ${setupMode ? "setup-available" : ""} ${draggedArea ? "area-drag-target" : ""} ${dragOver ? "drag-over" : ""} ${justPlaced ? "area-just-placed" : ""}`} onClick={placeSelectedArea}>
     <div className="slot-header"><span>{slot.type === "open" ? <DoorOpen size={13} /> : slot.type === "cubicle" ? <LockKeyhole size={13} /> : <Layers3 size={13} />}{slot.type === "open" ? "OPEN SPACE" : slot.type === "cubicle" ? "CUBICLES" : "EMPTY BAY"}</span>{setupMode && slot.type && <em className="setup-edit">REPLACE</em>}<b>{slot.type ? `${slot.developers.length}/${cap}` : "—"}</b></div>
-    {!slot.type ? <div className="unconfigured-slot"><div className="bay-grid" /><MousePointer2 size={22} /><b>{dragOver ? "RELEASE TO INSTALL" : selectedArea ? "CLICK TO INSTALL" : "DROP OFFICE CARD"}</b><small>{draggedArea ? (draggedArea === "open" ? "Open Space · 4 desks" : "Cubicles · 2 desks") : "Open Space or Cubicles"}</small></div> : <div className="slot-grid">{Array.from({ length: 4 }).map((_, position) => {
+    {!slot.type ? <div className="unconfigured-slot"><div className="bay-grid" /><MousePointer2 size={22} /><b>{dragOver ? "RELEASE TO INSTALL" : selectedArea ? "CLICK TO INSTALL" : "DROP OFFICE CARD"}</b><small>{draggedArea ? (draggedArea === "open" ? "Open Space · 4 desks" : "Cubicles · 2 desks") : "Open Space or Cubicles"}</small></div> : <div className="slot-grid">{Array.from({ length: cap }).map((_, position) => {
       const placedDev = slot.developers.find((developer) => developer.position === position);
       if (placedDev) { const dev = getDeveloper(placedDev.devId); const targeted = highlight?.targetId === placedDev.instanceId; const acting = highlight?.actorId === placedDev.instanceId; return <button type="button" aria-label={`Inspect ${dev.name} at desk ${position + 1}`} className={`board-card ${targeted ? "targeted" : ""} ${acting ? `acting ${highlight?.kind}` : ""}`} onClick={(event) => { event.stopPropagation(); onInspect?.(placedDev); }} key={placedDev.instanceId} style={{ "--accent": dev.accent } as React.CSSProperties}>{targeted && <span className="target-marker">!</span>}{acting && <span className="action-marker">{highlight?.kind === "taunt" ? "💬" : "</>"}</span>}<span className="board-card-face"><img src={dev.art} alt={dev.name} /><span className="board-card-meta"><b>{dev.name}</b><span><Brain size={10} /> {placedDev.sanity}</span></span></span></button>; }
-      if (position >= cap) return <div className="slot-blocked" key={`blocked-${position}`}><LockKeyhole size={12} /></div>;
       if (owner === "enemy") return <div className="slot-empty" key={`empty-${position}`}><Plus size={13} /></div>;
       return <div data-developer-desk={`${index}:${position}`} className={`slot-empty ${readyForDev ? "deploy-target" : ""} ${hoveredDeskPosition === position ? "developer-drag-over" : ""}`} key={`empty-${position}`}><Plus size={13} /><small>{hoveredDeskPosition === position ? "RELEASE" : readyForDev ? `DESK ${position + 1}` : ""}</small></div>;
     })}</div>}
@@ -728,7 +748,7 @@ function BoardSlotView({ slot, index, owner, setupMode = false, selectedArea, dr
   </div>;
 }
 
-function Planner({ developers, project, plan, setPlan, onClose, onRun }: { developers: PlacedDev[]; project?: ProjectState; plan: Record<string, PlannedAction>; setPlan: (p: Record<string, PlannedAction>) => void; onClose: () => void; onRun: () => void }) {
+function Planner({ developers, project, plan, setPlan, onClose, onSave }: { developers: PlacedDev[]; project?: ProjectState; plan: Record<string, PlannedAction>; setPlan: (p: Record<string, PlannedAction>) => void; onClose: () => void; onSave: () => void }) {
   const [editing, setEditing] = useState<{ key: string; placed: PlacedDev; sequence: number } | null>(null);
   const set = (key: string, value: PlannedAction) => setPlan({ ...plan, [key]: value });
   return <div className="modal-backdrop"><section className="planner-modal">
@@ -736,7 +756,7 @@ function Planner({ developers, project, plan, setPlan, onClose, onRun }: { devel
     <div className="planner-summary"><span><BriefcaseBusiness size={14} /> {project?.name ?? "No project selected"}</span>{project && <span><Zap size={14} /> {project.progress}/{project.mvp} MVP</span>}<span><Ticket size={14} /> 8 sequences max</span></div>
     {!developers.length ? <div className="planner-empty"><Users size={34} /><b>No developers deployed</b><span>Close this panel and deploy someone from your hand.</span></div> : <div className="matrix-wrap"><table className="action-matrix"><thead><tr><th>DEVELOPER</th>{Array.from({ length: 8 }).map((_, i) => <th key={i}><span>{i + 1}</span></th>)}</tr></thead><tbody>{developers.map((placed) => { const dev = getDeveloper(placed.devId); return <tr key={placed.instanceId}><td><img src={dev.art} alt="" /><span><b>{dev.name}</b><small>{dev.role}</small></span></td>{Array.from({ length: 8 }).map((_, i) => { const key = `${placed.instanceId}-${i + 1}`; const action = plan[key] ?? "skip"; const task = action.startsWith("work:") ? project?.tasks.find((t) => t.id === action.slice(5)) : undefined; return <td key={key}><button className={`matrix-action ${action === "skip" ? "empty" : action === "taunt" ? "taunt" : "work"}`} aria-label={`${dev.name} sequence ${i + 1}: ${task?.title ?? action}`} onClick={() => setEditing({ key, placed, sequence: i + 1 })}>{action === "skip" ? <><Plus size={12} /><span>Assign</span></> : action === "taunt" ? <><AlertTriangle size={12} /><span>Taunt</span></> : <><Code2 size={12} /><span>{task?.title}</span></>}</button></td>; })}</tr>; })}</tbody></table></div>}
     <div className="task-legend">{project?.tasks.map((task) => <div key={task.id} className={project.tasksState[task.id].completed ? "complete" : ""}><span className={`role-dot ${task.type.toLowerCase()}`} /><span><b>{task.title}</b><small>{task.type} · +{task.points} MVP{task.dependsOn ? ` · linked +${task.coupling}%` : ""}</small></span><em>{project.tasksState[task.id].completed ? "DONE" : `${project.tasksState[task.id].marks} MARKS`}</em></div>)}</div>
-    <footer><button className="secondary-cta" onClick={onClose}>Keep planning</button><button className="primary-cta small" onClick={onRun}><Play fill="currentColor" size={16} /> End turn & run sprint</button></footer>
+    <footer><button className="secondary-cta" onClick={onClose}>Keep editing</button><button className="primary-cta small" onClick={onSave}><Check size={16} /> Save sprint plan</button></footer>
     {editing && (() => { const dev = getDeveloper(editing.placed.devId); const current = plan[editing.key] ?? "skip"; const legalTasks = project?.tasks.filter((task) => roleCanWork(dev.role, task.type) && !project.tasksState[task.id].completed) ?? []; return <div className="action-picker-backdrop" onClick={() => setEditing(null)}><div className="action-picker" onClick={(e) => e.stopPropagation()}>
       <header><img src={dev.art} alt="" /><span><small>SEQUENCE {editing.sequence}</small><b>{dev.name}'s action</b><em>{dev.role} · {dev.completion}% base power</em></span><button onClick={() => setEditing(null)}><X size={18} /></button></header>
       <div className="quick-actions"><button className={current === "skip" ? "selected" : ""} onClick={() => { set(editing.key, "skip"); setEditing(null); }}><Minus size={15} /><span><b>Skip</b><small>Leave this ticket unused</small></span></button><button className={current === "taunt" ? "selected taunt" : "taunt"} onClick={() => { set(editing.key, "taunt"); setEditing(null); }}><AlertTriangle size={15} /><span><b>Taunt opposite slot</b><small>Attack developer sanity</small></span></button></div>
@@ -744,5 +764,15 @@ function Planner({ developers, project, plan, setPlan, onClose, onRun }: { devel
       <div className="picker-tasks">{legalTasks.map((task) => { const state = project!.tasksState[task.id]; const depReady = !task.dependsOn || project!.tasksState[task.dependsOn]?.completed; const estimate = clamp(dev.completion + (ROLE_CHANCES[dev.role][task.type] ?? 0) + state.marks * 6 + (task.dependsOn && depReady ? task.coupling ?? 0 : 0), 12, 96); return <button key={task.id} className={current === `work:${task.id}` ? "selected" : ""} onClick={() => { set(editing.key, `work:${task.id}`); setEditing(null); }}><span className={`role-dot ${task.type.toLowerCase()}`} /><span><b>{task.title}</b><small>{task.type} · +{task.points} MVP{task.dependsOn ? depReady ? ` · dependency ready +${task.coupling}%` : " · dependency not ready" : ""}</small></span><em><b>{estimate}%</b><small>EST. CHANCE</small></em></button>; })}{!legalTasks.length && <div className="no-compatible">No compatible incomplete tasks for this developer.</div>}</div>
       <p className="picker-note">Estimate includes role, current failure marks, and completed dependencies. Slot traits resolve during the sprint.</p>
     </div></div>; })()}
+  </section></div>;
+}
+
+function SprintConfirmation({ turn, project, plannedActions, onCancel, onConfirm }: { turn: number; project?: ProjectState; plannedActions: number; onCancel: () => void; onConfirm: () => void }) {
+  return <div className="modal-backdrop sprint-confirm-backdrop" onClick={onCancel}><section className="sprint-confirm" onClick={(event) => event.stopPropagation()}>
+    <div className="sprint-confirm-art"><img src="/ui/sprint-button.png" alt="" /><span>TURN COMMIT</span></div>
+    <span className="eyebrow-small">SPRINT {String(turn).padStart(2, "0")}</span><h2>Launch this sprint?</h2><p>Running the sprint commits your queue and ends your planning phase. Every action will resolve in sequence.</p>
+    <div className="sprint-confirm-stats"><span><BriefcaseBusiness size={16} /><b>{project?.name ?? "No project"}</b></span><span><Ticket size={16} /><b>{plannedActions} planned actions</b></span></div>
+    {plannedActions === 0 && <div className="sprint-empty-warning"><AlertTriangle size={17} /><span><b>Your queue is empty.</b><small>The team will spend every sequence idle.</small></span></div>}
+    <footer><button className="secondary-cta" onClick={onCancel}>Back to planning</button><button className="sprint-confirm-go" onClick={onConfirm}><Play fill="currentColor" size={17} /> End turn &amp; Sprint!</button></footer>
   </section></div>;
 }
