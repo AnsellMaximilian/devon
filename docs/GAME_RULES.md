@@ -39,7 +39,7 @@ Completion chance starts with a developer's completion power and receives this r
 | Mobile | -48% | -58% | +12% |
 | Full Stack | +5% | +5% | -38% |
 
-Every developer may attempt every task. Matching specialists are reliable, while cross-role assignments take severe penalties but always retain a slim chance to work. Full Stack remains close to a specialist on Frontend and Backend but struggles on Mobile. Chances are clamped to 5–96% so even a desperate mismatch can occasionally become a memorable save.
+Every developer may attempt every task. Matching specialists are reliable, while cross-role assignments take severe penalties but always retain a slim chance to work. Full Stack remains close to a specialist on Frontend and Backend but struggles on Mobile. Chances are clamped to 5–96% so even a desperate mismatch can occasionally become a memorable save. Work resolves with one integer roll from 1–100; a roll at or below the displayed chance succeeds. The wheel lands at the center of that roll's one-percent slice so its green or gray landing always matches the result.
 
 A failed attempt gives that task a failure mark. Each mark adds a flat +6 percentage points to later attempts. This linear increase rewards persistence without letting failure snowball exponentially.
 

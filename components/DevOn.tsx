@@ -530,7 +530,9 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       const dev = getDeveloper(actor.devId);
       const actorSlots = owner === "player" ? pSlots : eSlots;
       const chance = completionChance(dev, task.id, project, actorSlots, actor, sequence, !!task.dependsOn && completedAtSequenceStart.has(task.dependsOn));
-      const roll = Math.random() * 100;
+      // Use the same discrete 1-100 roll for both the game result and the wheel.
+      // This keeps a visually successful landing from disagreeing with the result.
+      const roll = Math.floor(Math.random() * 100) + 1;
       const success = roll <= chance;
       const before = project.progress;
       const key = ++stageKey;
@@ -918,7 +920,10 @@ function ActionStageView({ stage }: { stage: ActionStage }) {
   const targetName = target?.name ?? (stage.owner === "player" ? "RIVAL LEAD" : "YOUR SANITY");
   const targetMax = target?.sanity ?? 30;
   const chance = Math.round(stage.chance ?? 0);
-  const roll = Math.round(stage.roll ?? 0);
+  const roll = clamp(Math.round(stage.roll ?? 1), 1, 100);
+  // Land in the center of the roll's one-percent slice, never on the
+  // success/failure boundary where anti-aliasing can make the result ambiguous.
+  const rollAngle = (roll - .5) * 3.6;
   const projectBefore = clamp(((stage.projectBefore ?? 0) / (stage.projectMax || 1)) * 100, 0, 100);
   const projectAfter = clamp(((stage.projectAfter ?? 0) / (stage.projectMax || 1)) * 100, 0, 100);
   const sanityBefore = clamp(((stage.targetSanityBefore ?? 0) / targetMax) * 100, 0, 100);
@@ -938,7 +943,7 @@ function ActionStageView({ stage }: { stage: ActionStage }) {
       <div className="stage-action-core">
         {stage.kind === "skip" && <div className="stage-skip-symbol"><Minus /><b>NO ACTION</b><small>Ticket unused</small></div>}
         {stage.kind === "taunt" && <div className="stage-taunt-impact" aria-hidden="true"><span><i /><i /><i /></span><b>-{stage.damage}</b></div>}
-        {stage.kind === "work" && <div className="chance-wheel-wrap"><div className="chance-wheel" style={{ "--chance-angle": `${chance * 3.6}deg`, "--roll-angle": `${roll * 3.6}deg` } as React.CSSProperties}><span className="chance-needle" /><span className="chance-center"><b>{chance}%</b><small>SUCCESS</small></span></div><em>{stage.phase === "rolling" ? "ROLLING…" : stage.success ? "COMPILED!" : "BUILD FAILED"}</em></div>}
+        {stage.kind === "work" && <div className="chance-wheel-wrap"><div className="chance-wheel" style={{ "--chance-angle": `${chance * 3.6}deg`, "--roll-angle": `${rollAngle}deg` } as React.CSSProperties}><span className="chance-needle" /><span className="chance-center"><b>{chance}%</b><small>SUCCESS</small></span></div><em>{stage.phase === "rolling" ? "ROLLING…" : stage.success ? "COMPILED!" : "BUILD FAILED"}</em></div>}
       </div>
 
       {stage.kind === "work" && stage.task ? <article className="stage-work-card" style={{ "--project": stage.projectAccent } as React.CSSProperties}>

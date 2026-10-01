@@ -504,7 +504,8 @@ body { overflow-x:hidden; }
 .chance-center { position:absolute;z-index:3;inset:26px;display:grid;place-content:center;text-align:center;border-radius:50%; }.chance-center b,.chance-center small { display:block; }.chance-center b { color:#fff;font:900 25px Space Grotesk; }.chance-center small { color:#7e95a6;font:700 7px DM Mono;letter-spacing:.1em; }
 .chance-needle { position:absolute;z-index:5;left:calc(50% - 2px);top:5px;width:4px;height:61px;border-radius:4px;background:#fff;box-shadow:0 0 9px #fff;transform-origin:50% 61px;animation:chanceSpin .72s linear infinite; }
 @keyframes chanceSpin { to { transform:rotate(1080deg); } }
-.action-stage.result .chance-needle { animation:none;transform:rotate(calc(var(--roll-angle) + 720deg));transition:transform .9s cubic-bezier(.12,.72,.2,1); }
+.action-stage.result .chance-needle { animation:chanceLand .95s cubic-bezier(.12,.72,.2,1) both;transition:none; }
+@keyframes chanceLand { from { transform:rotate(0deg); } to { transform:rotate(calc(var(--roll-angle) + 720deg)); } }
 .action-stage.work.success .chance-wheel { box-shadow:0 0 0 4px #a8e94445,0 0 38px #a8e9447a; }.action-stage.work.failure .chance-wheel { box-shadow:0 0 0 4px #ff4f8d45,0 0 38px #ff4f8d6e; }
 
 .action-stage.taunt { --taunt-lunge:175px; }
