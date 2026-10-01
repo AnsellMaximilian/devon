@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, Brain, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleHelp, Code2, DoorOpen, Hand, Layers3, LockKeyhole, Minus, MousePointer2, Play, Plus, RotateCcw, Shield, Sparkles, Swords, Ticket, Trophy, Users, Volume2, X, Zap, ZoomIn, ZoomOut } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BookOpen, Brain, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleHelp, Code2, DoorOpen, Hand, Home as HomeIcon, Layers3, LockKeyhole, Menu, Minus, MousePointer2, Play, Plus, RotateCcw, Settings, Shield, Sparkles, Swords, Ticket, Trophy, Users, Volume2, VolumeX, X, Zap, ZoomIn, ZoomOut } from "lucide-react";
 import { DevCard } from "./DevCard";
 import { DEVELOPERS, PROJECTS, ROLE_CHANCES, getDeveloper, roleCanWork, type AreaType, type Developer, type Project } from "@/lib/game-data";
 
@@ -32,7 +32,7 @@ function Meter({ value, max, tone = "cyan" }: { value: number; max: number; tone
 
 function AppHeader({ onHome, onDeck, deckCount, inBattle = false }: { onHome: () => void; onDeck: () => void; deckCount: number; inBattle?: boolean }) {
   return <header className="app-header">
-    <button className="brand" onClick={onHome}><span className="brand-mark">D<span>!</span></span><span><b>DEV ON!</b><small>SHIP IT OR QUIT</small></span></button>
+    <button className="brand" onClick={onHome}><span className="brand-mark"><img src="/brand/dev-on-mark.png" alt="" /></span><span><b>DEV ON!</b><small>SHIP IT OR QUIT</small></span></button>
     <nav>
       {!inBattle && <button onClick={onDeck}><Layers3 size={17} /> Deck <em>{deckCount}/20</em></button>}
       <button className="icon-btn" aria-label="Sound"><Volume2 size={18} /></button>
@@ -122,6 +122,10 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     { type: "cubicle", developers: [] }
   ]);
   const [deckOpen, setDeckOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuHelpOpen, setMenuHelpOpen] = useState(false);
+  const [soundOn, setSoundOn] = useState(true);
+  const [unemployment, setUnemployment] = useState<string[]>([]);
   const [selectedArea, setSelectedArea] = useState<AreaType | null>(null);
   const [draggedArea, setDraggedArea] = useState<AreaType | null>(null);
   const [dragPointer, setDragPointer] = useState<{ x: number; y: number } | null>(null);
@@ -416,6 +420,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     let ps = projects.map((p) => ({ ...p, tasksState: Object.fromEntries(Object.entries(p.tasksState).map(([k, v]) => [k, { ...v }])) }));
     let pSan = playerSanity, eSan = enemySanity;
     let queuedBrags = [...brags];
+    let quitDevelopers = [...unemployment];
     let pProjectId: string | undefined = playerProject.id;
     let aiProjectId: string | undefined = enemyProject?.id;
 
@@ -476,7 +481,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
             if (target.devId === "fan" && dev.role === "Frontend") hit = 1;
             target.sanity -= hit; sequenceEvents.push(`${dev.name} taunted ${getDeveloper(target.devId).name}`);
             if (!sequenceHighlight) sequenceHighlight = { actorId: instance.instanceId, targetId: target.instanceId, kind: "taunt" };
-            if (target.sanity <= 0) { targetSlot.developers = targetSlot.developers.filter((d) => d.instanceId !== target.instanceId); sequenceEvents.push(`${getDeveloper(target.devId).name} quit!`); }
+            if (target.sanity <= 0) { targetSlot.developers = targetSlot.developers.filter((d) => d.instanceId !== target.instanceId); quitDevelopers.push(target.devId); sequenceEvents.push(`${getDeveloper(target.devId).name} quit!`); }
           }
           continue;
         }
@@ -493,6 +498,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
 
       setPlayerSlots(pSlots.map((s) => ({ ...s, developers: s.developers.map((d) => ({ ...d })) })));
       setEnemySlots(eSlots.map((s) => ({ ...s, developers: s.developers.map((d) => ({ ...d })) })));
+      setUnemployment([...quitDevelopers]);
       setProjects(ps.map((p) => ({ ...p, tasksState: { ...p.tasksState } })));
       setPlayerSanity(pSan); setEnemySanity(eSan); setBrags(queuedBrags);
       setHighlight(sequenceHighlight);
@@ -530,7 +536,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       { type: "open", developers: [{ instanceId: "cpu-wendy", devId: "wendy", sanity: 9, slot: 2, position: 0 }] },
       { type: "cubicle", developers: [] }
     ]);
-    setDeckOpen(false); setSelectedArea(null); endAreaDrag(); endDeveloperDrag(); setLastAreaInstall(null);
+    setDeckOpen(false); setMenuOpen(false); setMenuHelpOpen(false); setUnemployment([]); setSelectedArea(null); endAreaDrag(); endDeveloperDrag(); setLastAreaInstall(null);
     const nextProjects = freshProjects();
     nextProjects[1].claimedBy = "enemy";
     setProjects(nextProjects);
@@ -542,7 +548,6 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
   };
 
   return <main className={`battle-screen ${phase === "setup" ? "setup-active" : ""}`}>
-    <AppHeader onHome={onExit} onDeck={onExit} deckCount={deck.length} inBattle />
     <div className="battle-hud">
       <PlayerHud owner="enemy" name="NULL POINTERS" sanity={enemySanity} max={30} project={enemyProject} targeted={highlight?.targetId === "enemy-lead"} />
       <div className={`turn-pill ${phase === "setup" ? "setup" : ""}`}><span>{phase === "setup" ? "OFFICE" : "SPRINT"}</span><b>{phase === "setup" ? `${configuredAreas}/4` : String(turn).padStart(2, "0")}</b><small>{phase === "setup" ? "LAYOUT SETUP" : phase === "resolving" ? `SEQUENCE ${seqActive ?? 1}/8` : phase === "brag" ? "BRAG WINDOW" : "PLANNING"}</small></div>
@@ -568,6 +573,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
           <div className="lane-label player-lane">YOUR OFFICE</div>
         </div>
       </div>
+      <button className="battle-menu-trigger" onClick={() => setMenuOpen(true)} aria-label="Open battle menu"><Menu size={20} /><span><b>MENU</b><small>SETTINGS</small></span></button>
       <div className="camera-controls camera-pad">
         <button aria-label="Tilt board up" title="Hold to tilt up" {...holdProps(() => setCameraTilt((tilt) => clamp(tilt - 1.25, 38, 68)))}><ChevronUp /></button>
         <div><button aria-label="Pan board left" title="Hold to pan left" {...holdProps(() => setCameraX((x) => clamp(x - 20, -380, 380)))}><ChevronLeft /></button><span><MousePointer2 size={13} /><b>{Math.round(cameraTilt)}°</b><small>HOLD TO MOVE</small></span><button aria-label="Pan board right" title="Hold to pan right" {...holdProps(() => setCameraX((x) => clamp(x + 20, -380, 380)))}><ChevronRight /></button></div>
@@ -584,7 +590,10 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     </div>
 
     {phase !== "setup" && <div className="battle-dock">
-        <DrawPile remaining={deckRemaining} total={shuffledDeck.current.length} onOpen={() => setDeckOpen(true)} />
+        <div className="pile-rack">
+          <DrawPile remaining={deckRemaining} total={shuffledDeck.current.length} onOpen={() => setDeckOpen(true)} />
+          <UnemploymentPile developers={unemployment} />
+        </div>
         <div className="hand-zone"><div className="hand-label"><span><Hand size={15} /> DEVELOPER HAND</span><small>Click to inspect · drag onto an exact desk</small></div><div className="hand-cards fanned">{hand.map((id, i) => { const dev = getDeveloper(id); const offset = i - (hand.length - 1) / 2; return <div className={`hand-drag-card ${draggedDeveloper?.handIndex === i ? "dragging" : ""}`} style={{ "--fan-angle": `${offset * 3.5}deg`, "--fan-y": `${Math.abs(offset) * 3}px`, zIndex: i + 1 } as React.CSSProperties} onClick={() => inspectHandDeveloper(id, i)} onPointerDown={(event) => startDeveloperPointer(event, i, id)} onPointerMove={moveDeveloperPointer} onPointerUp={finishDeveloperPointer} onPointerCancel={cancelDeveloperPointer} key={`${id}-${i}`}><DevCard dev={dev} compact /></div>; })}{Array.from({ length: Math.max(0, 5 - hand.length) }).map((_, i) => <div className="empty-hand" key={i}><Code2 /></div>)}</div></div>
         <div className="battle-actions">
           {phase === "plan" && <button className="plan-button" onClick={openSprintPlanner}><Ticket size={27} /><span><b>PLAN SPRINT</b><small>Assign up to 8 sequences</small></span><ChevronRight /></button>}
@@ -600,6 +609,17 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     {projectModalOpen && <ProjectPicker projects={projects} activeProject={playerProject} onClaim={claimProject} onAbandon={abandon} onClose={() => setProjectModalOpen(false)} canEdit={phase === "plan"} />}
     {deckOpen && <DeckViewer deck={deck} remaining={phase === "setup" ? deck.length : deckRemaining} onClose={() => setDeckOpen(false)} onInspect={(devId) => setInspectedDeveloper({ devId })} />}
     {inspectedDeveloper && <DeveloperDetails inspected={inspectedDeveloper} onClose={() => setInspectedDeveloper(null)} />}
+    {menuOpen && <div className="modal-backdrop battle-menu-backdrop" onClick={() => setMenuOpen(false)}><section className="battle-menu-modal" onClick={(event) => event.stopPropagation()}>
+      <header><img src="/brand/dev-on-mark.png" alt="" /><div><span className="eyebrow-small">BATTLE PAUSED</span><h2>Dev On! menu</h2><p>Adjust the session or review the essentials.</p></div><button onClick={() => setMenuOpen(false)} aria-label="Close battle menu"><X /></button></header>
+      {menuHelpOpen ? <div className="battle-menu-help"><div><BookOpen size={22} /><span><b>Battle essentials</b><small>Quick rules reference</small></span></div><ol><li>Claim one project and deploy developers into configured offices.</li><li>Plan up to eight action sequences. Developers can work in parallel.</li><li>Complete the MVP, then Brag to damage the rival lead&apos;s sanity.</li><li>Developers at zero sanity enter the Unemployment pile.</li></ol><button className="menu-row" onClick={() => setMenuHelpOpen(false)}><ArrowLeft /><span><b>Back to menu</b><small>Return to session controls</small></span></button></div> : <div className="battle-menu-options">
+        <button className="menu-row primary" onClick={() => setMenuOpen(false)}><Play /><span><b>Continue battle</b><small>Return to the board</small></span><ChevronRight /></button>
+        <button className="menu-row" onClick={() => setSoundOn((enabled) => !enabled)}>{soundOn ? <Volume2 /> : <VolumeX />}<span><b>Sound effects</b><small>{soundOn ? "Enabled" : "Muted"}</small></span><em className={soundOn ? "on" : ""}>{soundOn ? "ON" : "OFF"}</em></button>
+        <button className="menu-row" onClick={() => setMenuHelpOpen(true)}><CircleHelp /><span><b>How to play</b><small>Review the battle loop</small></span><ChevronRight /></button>
+        <button className="menu-row" onClick={resetBattle}><RotateCcw /><span><b>Restart battle</b><small>Return to office setup</small></span></button>
+        <button className="menu-row danger" onClick={onExit}><HomeIcon /><span><b>Main menu</b><small>Leave this battle</small></span></button>
+      </div>}
+      <footer><Settings size={14} /> LOCAL SESSION · SINGLEPLAYER MVP</footer>
+    </section></div>}
     {phase === "gameover" && <div className="gameover-overlay"><div className={`gameover-card ${winner}`}><div className="burst" /><Trophy size={54} /><span>{winner === "player" ? "SHIP HAPPENS" : "PROD IS DOWN"}</span><h2>{winner === "player" ? "You shipped it." : "You burned out."}</h2><p>{winner === "player" ? "The rival lead has no sanity left. Take the win." : "Your sanity hit zero. The backlog wins this round."}</p><div><button className="primary-cta small" onClick={resetBattle}><RotateCcw size={17} /> Rematch</button><button className="secondary-cta" onClick={onExit}>Main menu</button></div></div></div>}
   </main>;
 }
@@ -615,12 +635,19 @@ function OfficeCard({ area, selected, dragging, onClick, onPointerDown, onPointe
 
 function DrawPile({ remaining, total, label = "DRAW PILE", onOpen }: { remaining: number; total: number; label?: string; onOpen: () => void }) {
   return <button type="button" className="draw-pile" onClick={onOpen} aria-label={`Open ${label.toLowerCase()}`}>
-    <div className="hand-label"><span><Layers3 size={15} /> {label}</span><small>Click to inspect</small></div>
-    <div className="draw-pile-body">
-      <div className={`card-back-stack ${remaining ? "" : "empty"}`}><i /><i /><i><span>D<b>!</b></span></i></div>
-      <span><b>{remaining}</b><small>{label === "YOUR DECK" ? `${total} CARD\nLOADOUT` : `CARDS\nREMAINING`}</small></span>
-    </div>
+    <span className="pile-label"><Layers3 size={13} /><b>{label}</b></span>
+    <span className="pile-visual"><span className={`card-back-stack ${remaining ? "" : "empty"}`}><i><img src="/cards/dev-on-card-back.png" alt="" /></i><i><img src="/cards/dev-on-card-back.png" alt="" /></i><i><img src="/cards/dev-on-card-back.png" alt="" /></i></span><strong className="pile-badge left">{remaining}</strong></span>
+    <small>{label === "YOUR DECK" ? `${total} CARD LOADOUT` : "CLICK TO INSPECT"}</small>
   </button>;
+}
+
+function UnemploymentPile({ developers }: { developers: string[] }) {
+  const names = developers.map((id) => getDeveloper(id).name).join(", ");
+  return <div className={`unemployment-pile ${developers.length ? "occupied" : ""}`} aria-label={`${developers.length} developers in unemployment${names ? `: ${names}` : ""}`} title={names || "No developers have quit"}>
+    <span className="pile-label"><BriefcaseBusiness size={13} /><b>UNEMPLOYMENT</b></span>
+    <span className="pile-visual"><span className={`card-back-stack unemployment ${developers.length ? "" : "empty"}`}><i><img src="/cards/dev-on-card-back.png" alt="" /></i><i><img src="/cards/dev-on-card-back.png" alt="" /></i><i><img src="/cards/dev-on-card-back.png" alt="" /></i></span><strong className="pile-badge right">{developers.length}</strong></span>
+    <small>{developers.length ? "OUT OF THE GAME" : "NO QUITTERS"}</small>
+  </div>;
 }
 
 function DeckViewer({ deck, remaining, onClose, onInspect }: { deck: string[]; remaining: number; onClose: () => void; onInspect: (devId: string) => void }) {
@@ -628,7 +655,7 @@ function DeckViewer({ deck, remaining, onClose, onInspect }: { deck: string[]; r
   const roster = DEVELOPERS.filter((dev) => counts[dev.id]);
   return <div className="modal-backdrop deck-viewer-backdrop" onClick={onClose}><section className="deck-viewer" onClick={(event) => event.stopPropagation()}>
     <header><div><span className="eyebrow-small">CURRENT LOADOUT</span><h2>Your developer deck</h2><p>Review your roles and traits before committing office space. Click any card for its full profile.</p></div><div className="deck-viewer-count"><b>{deck.length}</b><small>TOTAL CARDS<br />{remaining} IN DRAW PILE</small></div><button onClick={onClose} aria-label="Close deck overview"><X size={18} /></button></header>
-    <div className="deck-viewer-grid">{roster.map((dev, index) => <button type="button" onClick={() => onInspect(dev.id)} className="deck-overview-card" key={dev.id} style={{ "--accent": dev.accent, "--deal-delay": `${index * 35}ms` } as React.CSSProperties}><div><img src={dev.art} alt={`${dev.name} portrait`} /><em>×{counts[dev.id]}</em></div><span><small>{dev.role}</small><b>{dev.name}</b><p>{dev.traitLabel}</p></span><span className="deck-overview-stats"><i><Brain size={12} /> {dev.completion}%</i><i><Shield size={12} /> {dev.sanity}</i></span></button>)}</div>
+    <div className="deck-viewer-grid">{roster.map((dev, index) => <button type="button" onClick={() => onInspect(dev.id)} className="deck-overview-card" key={dev.id} style={{ "--accent": dev.accent, "--deal-delay": `${index * 35}ms` } as React.CSSProperties}><img src={dev.art} alt={`${dev.name} portrait`} /><span className="deck-card-role">{dev.role}</span><em className="deck-card-count">×{counts[dev.id]}</em><span className="deck-card-overlay"><b>{dev.name}</b><span className="deck-card-stats"><i><Brain size={11} /> {dev.completion}%</i><i><Shield size={11} /> {dev.sanity}</i></span><small><Sparkles size={10} /> {dev.traitLabel}</small></span></button>)}</div>
     <footer><span><Layers3 size={15} /> {roster.length} unique developers · {deck.length}/20 cards</span><button className="primary-cta small" onClick={onClose}>Back to board</button></footer>
   </section></div>;
 }
