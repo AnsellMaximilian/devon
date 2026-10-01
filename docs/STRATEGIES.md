@@ -32,7 +32,7 @@ Direct player damage through cubicles can set up a Brag lethal. Conversely, pres
 
 The backlog is shared. Claiming a high-value project denies it to the opponent, but locking early can expose a role mismatch in the current hand. Low-MVP projects create faster, smaller Brags; high-MVP projects are slower but can end a damaged opponent outright.
 
-If a project completes in sequence 1, every later Work action aimed at it is wasted. A likely completion should therefore be followed by Taunts or Skips rather than three speculative Work tickets. The uncertainty is the point: players decide how much insurance to buy.
+If a task or project completes early, every later Work action aimed at it is automatically converted into a visible **Already Shipped** skip. A likely completion should therefore be followed by Taunts or intentional Skips rather than three speculative Work tickets. The uncertainty is the point: players decide how much insurance to buy.
 
 ## Playing against the MVP AI
 

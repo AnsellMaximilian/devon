@@ -507,6 +507,50 @@ body { overflow-x:hidden; }
 @keyframes skipStamp { from { opacity:0;transform:translate(-50%,-50%) rotate(-9deg) scale(1.8); } }
 .stage-empty-ticket { display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;border-style:dashed;color:#5e7485;text-align:center; }.stage-empty-ticket svg { width:43px;height:43px; }.stage-empty-ticket b { color:#92a4b1;font:800 12px Space Grotesk; }.stage-empty-ticket small { width:75%;font:500 8px/1.45 DM Mono; }
 
+/* Persistent Brag control and explicit HUD sides. */
+.battle-hud { grid-template-areas:"enemy turn player"; }
+.hud-stack { position:relative;min-width:0; }
+.enemy-hud-stack { grid-area:enemy;justify-self:start; }
+.player-hud-stack { grid-area:player;justify-self:end; }
+.turn-pill { grid-area:turn; }
+.hud-brag-button { position:absolute;z-index:28;left:125px;top:59px;width:108px;height:62px;padding:0;border:0;background:transparent;display:grid;place-items:center;cursor:pointer;transition:opacity .2s,filter .2s,transform .2s; }
+.hud-brag-button:before { content:"";position:absolute;z-index:-1;left:50%;top:-11px;width:34px;height:15px;transform:translateX(-50%);border-left:2px solid #506575;border-right:2px solid #506575;opacity:.78; }
+.hud-brag-button img { width:106px;max-height:68px;display:block;object-fit:contain; }
+.hud-brag-button.locked { opacity:.44;filter:grayscale(1) brightness(.64); }
+.hud-brag-button.locked:hover { opacity:.76;filter:grayscale(.45) brightness(.86);transform:translateY(2px); }
+.hud-brag-button>span { position:absolute;left:50%;bottom:-3px;transform:translateX(-50%);display:flex;align-items:center;gap:3px;padding:3px 7px;border:1px solid #4c6170;border-radius:999px;background:#0a151ee8;color:#8da1af;font:800 6px DM Mono;letter-spacing:.1em;white-space:nowrap; }
+.hud-brag-button>em { position:absolute;right:-3px;top:-1px;min-width:23px;height:23px;padding:0 5px;display:grid;place-items:center;border:2px solid #071019;border-radius:50%;background:var(--pink);box-shadow:0 0 14px #ff4f8d9e;color:white;font:900 11px Space Grotesk;font-style:normal; }
+.hud-brag-button.armed { filter:drop-shadow(0 7px 0 #680523) drop-shadow(0 0 15px #ff316f70); }
+.hud-brag-button.armed:hover { transform:translateY(-3px) scale(1.05);filter:brightness(1.12) drop-shadow(0 8px 0 #680523) drop-shadow(0 0 22px #ff316f9c); }
+.hud-brag-button.ready { animation:hudBragReady .8s ease-in-out infinite alternate; }
+@keyframes hudBragReady { to { transform:translateY(-3px) scale(1.06);filter:brightness(1.15) drop-shadow(0 8px 0 #680523) drop-shadow(0 0 27px #ff316fb8); } }
+
+.active-project-card.needs-attention { position:relative;z-index:45;border-color:var(--lime);box-shadow:0 0 0 2px #a8e94442,0 0 34px #a8e94482;animation:projectButtonCallout .58s ease-in-out infinite alternate; }
+.brag-required-warning { z-index:60;border-color:var(--pink);background:#230c17f2;box-shadow:0 18px 45px #000c,0 0 36px #ff4f8d52; }
+.brag-required-warning>img { width:76px;max-height:58px;flex:0 0 auto;object-fit:contain;filter:drop-shadow(0 8px 8px #000a) drop-shadow(0 0 13px #ff4f8d73);animation:bragWarningPop .62s ease-in-out infinite alternate; }
+.brag-required-warning b { color:#ffd8e6; }
+.brag-required-warning small { color:#d3a0b2; }
+@keyframes bragWarningPop { to { transform:translateY(-3px) rotate(-2deg) scale(1.05);filter:drop-shadow(0 10px 9px #000a) drop-shadow(0 0 19px #ff4f8d96); } }
+
+.brag-window-actions { min-width:158px;display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px 12px;border:1px solid #ff4f8d72;border-radius:12px;background:#160d17e8;box-shadow:0 9px 25px #0009,0 0 16px #ff4f8d2b; }
+.brag-window-actions>span { color:#ff9abc;font:900 8px DM Mono;letter-spacing:.11em; }
+.brag-window-actions .skip-button { min-width:132px;height:34px; }
+
+/* A queued ticket whose task already shipped reads as a resolved skip, not an idle turn. */
+.skip-stamp.completed { border-color:var(--lime);background:#11251ce8;color:#e8ffc5;box-shadow:0 7px 20px #000,0 0 19px #a8e94474; }
+.stage-skip-symbol.completed { color:var(--lime); }
+.stage-skip-symbol.completed svg { border-color:var(--lime);background:#10231a;box-shadow:0 0 20px #a8e94448; }
+.stage-empty-ticket.completed-ticket { --accent:var(--lime);border-style:solid;border-color:var(--lime);background:radial-gradient(circle at 50% 38%,#244326,#102019 68%);color:var(--lime); }
+.stage-empty-ticket.completed-ticket svg { padding:7px;border:2px solid var(--lime);border-radius:50%;background:#142b1c;box-shadow:0 0 22px #a8e94456; }
+.stage-empty-ticket.completed-ticket b { color:#e8ffc5; }
+
+@media (max-width:760px) {
+  .hud-brag-button { left:42px;top:60px;transform:scale(.82);transform-origin:top left; }
+  .hud-brag-button.locked:hover { transform:translateY(2px) scale(.82); }
+  .hud-brag-button.armed:hover { transform:translateY(-3px) scale(.86); }
+  .brag-required-warning>img { width:62px; }
+}
+
 .stage-work-card { --accent:var(--project);padding:24px 20px;display:flex;flex-direction:column;align-items:flex-start;border-color:var(--project);background:linear-gradient(145deg,color-mix(in srgb,var(--project) 12%,#101e29),#0b1721); }
 .stage-work-card>small { margin-top:13px;color:#7c93a5;font:700 7px DM Mono;letter-spacing:.12em; }.stage-work-card>b { margin:8px 0 10px;color:white;font:900 22px/1.05 Space Grotesk; }.stage-work-card>p { margin:0;color:#7890a1;font:600 8px DM Mono; }.stage-work-card>p strong { color:var(--lime); }.stage-work-card>div { width:100%;margin-top:auto;display:flex;align-items:center;gap:9px;padding:10px;border:1px solid #344a5a;border-radius:8px;background:#09151e; }.stage-work-card>div>svg { color:var(--cyan); }.stage-work-card>div b,.stage-work-card>div small { display:block; }.stage-work-card>div b { font:800 10px Space Grotesk; }.stage-work-card>div small { margin-top:2px;color:#718899;font:600 7px DM Mono; }
 .chance-wheel-wrap { display:flex;flex-direction:column;align-items:center;gap:9px; }.chance-wheel-wrap>em { color:#a7b8c4;font:900 9px DM Mono;font-style:normal;letter-spacing:.12em; }

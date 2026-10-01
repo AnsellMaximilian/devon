@@ -25,6 +25,7 @@ type ActionStage = {
   owner: Owner;
   actor: PlacedDev;
   kind: "skip" | "work" | "taunt";
+  skipReason?: "idle" | "task-complete" | "project-complete";
   phase: "intro" | "rolling" | "result";
   message: string;
   task?: ProjectTask;
@@ -172,6 +173,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
   const [sprintConfirmOpen, setSprintConfirmOpen] = useState(false);
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [projectNudge, setProjectNudge] = useState<number | null>(null);
+  const [bragNudge, setBragNudge] = useState<number | null>(null);
   const [plan, setPlan] = useState<Record<string, PlannedAction>>({});
   const [phase, setPhase] = useState<BattlePhase>("setup");
   const [event, setEvent] = useState("Set up your office before the first sprint begins.");
@@ -224,6 +226,12 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     const timer = setTimeout(() => setProjectNudge(null), 3600);
     return () => clearTimeout(timer);
   }, [projectNudge]);
+
+  useEffect(() => {
+    if (!bragNudge) return;
+    const timer = setTimeout(() => setBragNudge(null), 3600);
+    return () => clearTimeout(timer);
+  }, [bragNudge]);
 
   useEffect(() => {
     if (!turnDrawEvent) return;
@@ -409,6 +417,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     if (!target || target.claimedBy || target.completed) return;
     setProjects((ps) => ps.map((p) => p.id === id ? { ...p, claimedBy: "player" } : p));
     setProjectNudge(null);
+    setBragNudge(null);
     setProjectModalOpen(false);
     setEvent(`${target.name} locked. Time to plan the sprint.`); setEventTone("good");
     playBattleSound("projectLock");
@@ -425,6 +434,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
   const openProjectPicker = () => {
     if (phase !== "plan") return;
     setProjectNudge(null);
+    setBragNudge(null);
     setProjectModalOpen(true);
   };
 
@@ -541,11 +551,11 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       await wait(180);
     };
 
-    const playSkip = async (owner: Owner, actor: PlacedDev, sequence: number, message: string) => {
+    const playSkip = async (owner: Owner, actor: PlacedDev, sequence: number, message: string, skipReason: ActionStage["skipReason"] = "idle", task?: ProjectTask) => {
       const dev = getDeveloper(actor.devId);
       const key = ++stageKey;
       setHighlight({ actorId: actor.instanceId, kind: "skip" });
-      setActionStage({ key, sequence, owner, actor: { ...actor }, kind: "skip", phase: "result", message });
+      setActionStage({ key, sequence, owner, actor: { ...actor }, kind: "skip", skipReason, task, phase: "result", message });
       setEvent(`${dev.name}: ${message}`); setEventTone("neutral");
       playBattleSound("skip");
       await wait(1200);
@@ -675,7 +685,8 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
         if (action.startsWith("work:")) {
           const taskId = action.slice(5);
           const task = pp?.tasks.find((candidate) => candidate.id === taskId);
-          if (!pp || !task || pp.tasksState[taskId].completed) await playSkip("player", actor, seq, pp ? "Task already shipped — ticket became moot." : "Project already reached MVP — ticket became moot.");
+          if (!pp || !task) await playSkip("player", actor, seq, "Project already reached MVP — this ticket was auto-skipped.", "project-complete");
+          else if (pp.tasksState[taskId].completed) await playSkip("player", actor, seq, `${task.title} was already shipped by an earlier action — this ticket was auto-skipped.`, "task-complete", task);
           else await playWork("player", actor, pp, task, seq, completedAtSequenceStart.get(pp.id) ?? new Set<string>());
         } else if (action.startsWith("taunt:")) {
           await playTaunt("player", actor, seq, action.slice(6));
@@ -721,13 +732,30 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
   };
 
   const useBrag = () => {
-    if (!brags.length) return;
     const hit = brags[0]; const remaining = brags.slice(1); const nextEnemy = Math.max(0, enemySanity - hit);
     setEnemySanity(nextEnemy); setBrags(remaining); setEvent(`You shipped it and bragged for ${hit} sanity damage!`); setEventTone("good");
     playBattleSound("brag");
     if (nextEnemy <= 0) { setWinner("player"); setPhase("gameover"); setTimeout(() => playBattleSound("victory"), 650); return; }
     // One brag per turn; extra brags remain banked.
     setTimeout(() => advanceTurn(projects, projects.find((p) => p.claimedBy === "enemy" && !p.completed)?.id), 500);
+  };
+
+  const tryUseBrag = () => {
+    if (!brags.length) {
+      setBragNudge(Date.now());
+      setEvent(playerProject ? `Complete ${playerProject.name}'s MVP to unlock a Brag.` : "Claim and complete a project to unlock a Brag.");
+      setEventTone("bad");
+      playBattleSound("skip");
+      return;
+    }
+    if (phase !== "brag") {
+      setEvent("Brag banked. Finish the current sprint to open the Brag window.");
+      setEventTone("neutral");
+      playBattleSound("uiConfirm");
+      return;
+    }
+    setBragNudge(null);
+    useBrag();
   };
 
   const skipBrag = () => { playBattleSound("skip"); advanceTurn(projects, projects.find((p) => p.claimedBy === "enemy" && !p.completed)?.id); };
@@ -758,7 +786,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     nextProjects[1].claimedBy = "enemy";
     setProjects(nextProjects);
     setPlayerSanity(30); setEnemySanity(30); setTurn(1); setCameraX(0); setCameraTilt(52); setCameraZoom(1);
-    setPlannerOpen(false); setSprintConfirmOpen(false); setProjectModalOpen(false); setProjectNudge(null); setPlan({}); setPhase("setup"); setBrags([]);
+    setPlannerOpen(false); setSprintConfirmOpen(false); setProjectModalOpen(false); setProjectNudge(null); setBragNudge(null); setPlan({}); setPhase("setup"); setBrags([]);
     setWinner(null); setSeqActive(null); setHighlight(null); setActionStage(null); setTauntTargetRequest(null); setInspectedDeveloper(null); setEventTone("neutral");
     setAnnouncement({ key: Date.now(), title: "OFFICE SETUP", subtitle: "Build your workspace before the first sprint", tone: "lime" });
     setEvent("Set up your office before the first sprint begins.");
@@ -766,16 +794,23 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
 
   return <main className={`battle-screen ${phase === "setup" ? "setup-active" : ""}`}>
     <div className="battle-hud">
-      <PlayerHud owner="enemy" name="NULL POINTERS" sanity={enemySanity} max={30} project={enemyProject} targeted={highlight?.targetId === "enemy-lead"} />
+      <div className="hud-stack enemy-hud-stack">
+        <PlayerHud owner="enemy" name="NULL POINTERS" sanity={enemySanity} max={30} project={enemyProject} targeted={highlight?.targetId === "enemy-lead"} />
+        <button type="button" className={`hud-brag-button ${brags.length ? "armed" : "locked"} ${phase === "brag" ? "ready" : ""}`} onClick={tryUseBrag} aria-label={brags.length ? `Use Brag. ${brags.length} available.` : "Brag locked. Complete a project first."}>
+          <img src="/ui/brag-burst.png" alt="" />
+          {!brags.length && <span><LockKeyhole size={10} /> LOCKED</span>}
+          {!!brags.length && <em>{brags.length}</em>}
+        </button>
+      </div>
       <div className={`turn-pill ${phase === "setup" ? "setup" : ""}`}><span>{phase === "setup" ? "OFFICE" : "SPRINT"}</span><b>{phase === "setup" ? `${configuredAreas}/4` : String(turn).padStart(2, "0")}</b><small>{phase === "setup" ? "LAYOUT SETUP" : phase === "resolving" ? `SEQUENCE ${seqActive ?? 1}/${SEQUENCE_COUNT}` : phase === "brag" ? "BRAG WINDOW" : "PLANNING"}</small></div>
-      <PlayerHud owner="player" name="YOU // LOCALHOST" sanity={playerSanity} max={30} project={playerProject} targeted={highlight?.targetId === "player-lead"} />
+      <div className="hud-stack player-hud-stack"><PlayerHud owner="player" name="YOU // LOCALHOST" sanity={playerSanity} max={30} project={playerProject} targeted={highlight?.targetId === "player-lead"} /></div>
     </div>
 
     {phase === "setup" ? <div className="setup-console-spacer" aria-hidden="true" /> : <div className="project-console">
-      {playerProject ? <button className="active-project-card" onClick={() => setProjectModalOpen(true)} style={{ "--project": playerProject.accent, "--project-progress": `${clamp((playerProject.progress / playerProject.mvp) * 100, 0, 100)}%` } as React.CSSProperties}>
+      {playerProject ? <button className={`active-project-card ${bragNudge ? "needs-attention" : ""}`} onClick={() => { setBragNudge(null); setProjectModalOpen(true); }} style={{ "--project": playerProject.accent, "--project-progress": `${clamp((playerProject.progress / playerProject.mvp) * 100, 0, 100)}%` } as React.CSSProperties}>
         <span className="project-icon"><BriefcaseBusiness size={16} /></span><span className="active-project-name"><b>{playerProject.name}</b><small>{playerProject.progress}/{playerProject.mvp} MVP</small></span><em>{playerProject.tasks.filter((t) => playerProject.tasksState[t.id].completed).length}/{playerProject.tasks.length} TASKS</em><ChevronRight size={14} />
-      </button> : <button className={`select-project-button ${projectNudge ? "needs-attention" : ""}`} onClick={openProjectPicker} disabled={phase !== "plan"}><Plus size={16} /><span><b>Select a project</b><small>Review scope before committing</small></span><ChevronRight size={16} /></button>}
-      {projectNudge && <img key={projectNudge} className="project-pointer" src="/ui/project-cursor.png" alt="" aria-hidden="true" />}
+      </button> : <button className={`select-project-button ${projectNudge || bragNudge ? "needs-attention" : ""}`} onClick={openProjectPicker} disabled={phase !== "plan"}><Plus size={16} /><span><b>Select a project</b><small>Review scope before committing</small></span><ChevronRight size={16} /></button>}
+      {(projectNudge || bragNudge) && <img key={projectNudge ?? bragNudge} className="project-pointer" src="/ui/project-cursor.png" alt="" aria-hidden="true" />}
     </div>}
 
     <div className={`board-viewport ${phase === "setup" ? "setup-board" : ""}`}>
@@ -796,7 +831,8 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
         <div className="zoom-controls"><button aria-label="Zoom board out" title="Hold to zoom out" {...holdProps(() => setCameraZoom((zoom) => clamp(zoom - .025, .72, 1.3)))}><ZoomOut /></button><span><b>{Math.round(cameraZoom * 100)}%</b><small>ZOOM</small></span><button aria-label="Zoom board in" title="Hold to zoom in" {...holdProps(() => setCameraZoom((zoom) => clamp(zoom + .025, .72, 1.3)))}><ZoomIn /></button></div>
       </div>
       {announcement && <div key={announcement.key} className={`stage-announcement ${announcement.tone}`}><small>{phase === "setup" ? "PRE-BATTLE" : "ACTIVE PLAYER"}</small><b>{announcement.title}</b><span>{announcement.subtitle}</span></div>}
-      {phase === "plan" && projectNudge && <div key={projectNudge} className="project-required-warning" role="status" aria-live="polite"><AlertTriangle size={18} /><span><b>SELECT A PROJECT FIRST</b><small>Claim work from the shared backlog, then plan your sprint.</small></span></div>}
+      {bragNudge && <div key={bragNudge} className="project-required-warning brag-required-warning" role="status" aria-live="polite"><img src="/ui/brag-burst.png" alt="" /><span><b>COMPLETE A PROJECT FIRST</b><small>{phase === "setup" ? "Finish office setup, then claim and complete a project." : playerProject ? `Reach ${playerProject.name}'s MVP to unlock a Brag.` : "Claim work from the shared backlog and complete its MVP."}</small></span></div>}
+      {phase === "plan" && projectNudge && !bragNudge && <div key={projectNudge} className="project-required-warning" role="status" aria-live="polite"><AlertTriangle size={18} /><span><b>SELECT A PROJECT FIRST</b><small>Claim work from the shared backlog, then plan your sprint.</small></span></div>}
       {phase === "plan" && tauntTargetRequest && <div className="taunt-target-prompt" role="status" aria-live="polite"><AlertTriangle size={20} /><span><b>CHOOSE A TAUNT TARGET</b><small>{getDeveloper(tauntTargetRequest.placed.devId).name} can hit rival Work Area {tauntTargetRequest.placed.slot + 1}, directly ahead. Select a highlighted developer; cubicles redirect the hit to the rival lead.</small></span><button onClick={cancelTauntTarget}>Cancel</button></div>}
       {phase === "setup" && !announcement && configuredAreas === 0 && <div className="setup-drag-hint"><b>PLACE YOUR OFFICE SPACES</b><span>Drag space cards into slots</span></div>}
       {phase === "setup" && !announcement && <div className="setup-card-tray" aria-label="Reusable office space cards"><OfficeCard area="open" selected={selectedArea === "open"} dragging={draggedArea === "open"} onClick={() => selectAreaCard("open")} onPointerDown={(event) => startAreaPointer(event, "open")} onPointerMove={moveAreaPointer} onPointerUp={finishAreaPointer} onPointerCancel={cancelAreaPointer} /><OfficeCard area="cubicle" selected={selectedArea === "cubicle"} dragging={draggedArea === "cubicle"} onClick={() => selectAreaCard("cubicle")} onPointerDown={(event) => startAreaPointer(event, "cubicle")} onPointerMove={moveAreaPointer} onPointerUp={finishAreaPointer} onPointerCancel={cancelAreaPointer} /></div>}
@@ -815,7 +851,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
         <div className="battle-actions">
           {phase === "plan" && <div className="sprint-controls"><button className="sprint-button" onClick={openSprintConfirmation} aria-label="Run sprint and end turn"><img src="/ui/sprint-button.png" alt="" /><span>SPRINT!</span></button><button className="plan-queue-button" onClick={openSprintPlanner}><Ticket size={15} /><span>PLAN</span><em>{plannedActions}</em></button></div>}
           {phase === "resolving" && <div className="resolving-button"><span className="spinner" /><div><b>SPRINT IN PROGRESS</b><small>Actions resolve in sequence</small></div></div>}
-          {phase === "brag" && <><button className="brag-button" onClick={useBrag} aria-label="Use Brag"><img src="/ui/brag-burst.png" alt="" />{brags.length > 1 && <em>{brags.length}</em>}</button><button className="skip-button" onClick={skipBrag}>Skip</button></>}
+          {phase === "brag" && <div className="brag-window-actions"><span>BRAG READY ABOVE</span><button className="skip-button" onClick={skipBrag}>Bank for later</button></div>}
         </div>
     </div></div>}
 
@@ -978,20 +1014,21 @@ function ActionStageView({ stage }: { stage: ActionStage }) {
   const projectAfter = clamp(((stage.projectAfter ?? 0) / (stage.projectMax || 1)) * 100, 0, 100);
   const sanityBefore = clamp(((stage.targetSanityBefore ?? 0) / targetMax) * 100, 0, 100);
   const sanityAfter = clamp(((stage.targetSanityAfter ?? 0) / targetMax) * 100, 0, 100);
+  const completedSkip = stage.kind === "skip" && stage.skipReason !== "idle";
 
   return <div key={stage.key} className={`action-stage ${stage.kind} ${stage.phase} ${stage.success === true ? "success" : stage.success === false ? "failure" : ""}`}>
     <div className="action-stage-heading"><span>SEQUENCE {String(stage.sequence).padStart(2, "0")} / {String(SEQUENCE_COUNT).padStart(2, "0")}</span><b>{stage.owner === "player" ? "YOUR DEVELOPER" : "RIVAL DEVELOPER"}</b></div>
     <div className="action-stage-arena">
       <div className="stage-developer-shell actor-shell">
         <article className="stage-developer-card actor-card" style={{ "--accent": actor.accent } as React.CSSProperties}>
-          <div className="stage-card-art"><img src={actor.art} alt={actor.name} />{stage.kind === "skip" && <strong className="skip-stamp">SKIP</strong>}</div>
+          <div className="stage-card-art"><img src={actor.art} alt={actor.name} />{stage.kind === "skip" && <strong className={`skip-stamp ${completedSkip ? "completed" : ""}`}>{completedSkip ? "DONE" : "SKIP"}</strong>}</div>
           <div className="stage-card-copy"><small>{actor.role}</small><b>{actor.name}</b><span><Brain size={13} /> {stage.actor.sanity} sanity</span></div>
         </article>
         {stage.kind === "taunt" && <img className="taunt-bubble-asset" src="/ui/taunt-bubble.png" alt="" aria-hidden="true" />}
       </div>
 
       <div className="stage-action-core">
-        {stage.kind === "skip" && <div className="stage-skip-symbol"><Minus /><b>NO ACTION</b><small>Ticket unused</small></div>}
+        {stage.kind === "skip" && <div className={`stage-skip-symbol ${completedSkip ? "completed" : ""}`}>{completedSkip ? <Check /> : <Minus />}<b>{completedSkip ? "ALREADY SHIPPED" : "NO ACTION"}</b><small>{completedSkip ? "Auto-skipped" : "Ticket unused"}</small></div>}
         {stage.kind === "taunt" && <div className="stage-taunt-impact" aria-hidden="true"><span><i /><i /><i /></span><b>-{stage.damage}</b></div>}
         {stage.kind === "work" && <div className="chance-wheel-wrap"><div className="chance-wheel" style={{ "--chance-angle": `${chance * 3.6}deg`, "--roll-angle": `${rollAngle}deg` } as React.CSSProperties}><span className="chance-needle" /><span className="chance-center"><b>{chance}%</b><small>SUCCESS</small></span></div><em>{stage.phase === "rolling" ? "ROLLING…" : stage.success ? "COMPILED!" : "BUILD FAILED"}</em></div>}
       </div>
@@ -1001,7 +1038,7 @@ function ActionStageView({ stage }: { stage: ActionStage }) {
       </article> : stage.kind === "taunt" ? <article className={`stage-developer-card target-card ${stage.targetIsLead ? "lead-card" : ""}`} style={{ "--accent": target?.accent ?? "#ff4f8d", "--sanity-before": `${sanityBefore}%`, "--sanity-after": `${sanityAfter}%` } as React.CSSProperties}>
         {target ? <div className="stage-card-art"><img src={target.art} alt={target.name} /></div> : <div className="stage-lead-art"><Brain /><span>TEAM LEAD</span></div>}
         <div className="stage-card-copy"><small>{target?.role ?? "PLAYER SANITY"}</small><b>{targetName}</b><span className="stage-sanity-readout"><Brain size={13} /><span><i>{stage.targetSanityBefore}</i><i>{stage.targetSanityAfter ?? stage.targetSanityBefore}</i></span>/{targetMax}</span><div className="stage-sanity-meter"><i /></div></div>
-      </article> : <div className="stage-empty-ticket"><Ticket /><b>EMPTY TICKET</b><small>This developer waits for the next sequence.</small></div>}
+      </article> : <div className={`stage-empty-ticket ${completedSkip ? "completed-ticket" : ""}`}>{completedSkip ? <Check /> : <Ticket />}<b>{stage.task?.title ?? (completedSkip ? "PROJECT COMPLETE" : "EMPTY TICKET")}</b><small>{completedSkip ? stage.task ? "Completed by an earlier action this sprint." : "The MVP was already completed earlier this sprint." : "This developer waits for the next sequence."}</small></div>}
     </div>
 
     <div className={`action-stage-result ${stage.phase === "result" ? "visible" : ""}`}><b>{stage.message}</b></div>
