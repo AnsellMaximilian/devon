@@ -44,7 +44,7 @@ export const DEVELOPERS: Developer[] = [
   { id: "priya", name: "Priya", role: "Backend", completion: 80, sanity: 11, traitLabel: "Incident Commander", trait: "The first failed Backend attempt each turn gains no failure mark.", quote: "Breathe. Read the logs.", art: "/developers/priya.png", accent: "#f3bd2f" },
   { id: "mateo", name: "Mateo", role: "Mobile", completion: 71, sanity: 9, traitLabel: "Rapid Prototype", trait: "His first Mobile attempt each turn gains +10% completion.", quote: "It works on my phone!", art: "/developers/mateo.png", accent: "#339cff" },
   { id: "zara", name: "Zara", role: "Frontend", completion: 74, sanity: 10, traitLabel: "A11y Advocate", trait: "Frontend tasks completed from her slot add +1 MVP.", quote: "If it isn't usable, it isn't done.", art: "/developers/zara.png", accent: "#9eea3a" },
-  { id: "nikko", name: "Nikko", role: "Backend", completion: 82, sanity: 7, traitLabel: "Night Owl", trait: "Gets +10% completion during sequences 5–8.", quote: "The servers are quieter at 2 AM.", art: "/developers/nikko.png", accent: "#9255ef" },
+  { id: "nikko", name: "Nikko", role: "Backend", completion: 82, sanity: 7, traitLabel: "Night Owl", trait: "Gets +10% completion during sequences 3–4.", quote: "The servers are quieter at 2 AM.", art: "/developers/nikko.png", accent: "#9255ef" },
   { id: "valentina", name: "Valentina", role: "Full Stack", completion: 77, sanity: 11, traitLabel: "Pairing Energy", trait: "Coworkers in her open space gain +5% completion.", quote: "Two cursors, one clean commit.", art: "/developers/valentina.png", accent: "#2bd2cf" },
   { id: "omar", name: "Omar", role: "Mobile", completion: 68, sanity: 10, traitLabel: "Move Fast", trait: "First attempt gets +12%; a failure adds an extra mark.", quote: "Ship now. Patch elegantly later.", art: "/developers/omar.png", accent: "#f04455" }
 ];
@@ -105,12 +105,11 @@ export const PROJECTS: Project[] = [
   }
 ];
 
-export const ROLE_CHANCES: Record<Role, Record<Exclude<Role, "Full Stack">, number | null>> = {
-  Frontend: { Frontend: 12, Backend: null, Mobile: null },
-  Backend: { Frontend: null, Backend: 12, Mobile: null },
-  Mobile: { Frontend: null, Backend: null, Mobile: 12 },
-  "Full Stack": { Frontend: 5, Backend: 5, Mobile: null },
+export const ROLE_CHANCES: Record<Role, Record<Exclude<Role, "Full Stack">, number>> = {
+  Frontend: { Frontend: 12, Backend: -62, Mobile: -52 },
+  Backend: { Frontend: -62, Backend: 12, Mobile: -58 },
+  Mobile: { Frontend: -48, Backend: -58, Mobile: 12 },
+  "Full Stack": { Frontend: 5, Backend: 5, Mobile: -38 },
 };
 
-export const roleCanWork = (role: Role, task: Exclude<Role, "Full Stack">) => ROLE_CHANCES[role][task] !== null;
 export const getDeveloper = (id: string) => DEVELOPERS.find((d) => d.id === id)!;

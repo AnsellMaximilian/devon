@@ -34,28 +34,28 @@ Completion chance starts with a developer's completion power and receives this r
 
 | Developer role | Frontend task | Backend task | Mobile task |
 | --- | ---: | ---: | ---: |
-| Frontend | +12% | Cannot attempt | Cannot attempt |
-| Backend | Cannot attempt | +12% | Cannot attempt |
-| Mobile | Cannot attempt | Cannot attempt | +12% |
-| Full Stack | +5% | +5% | Cannot attempt |
+| Frontend | +12% | -62% | -52% |
+| Backend | -62% | +12% | -58% |
+| Mobile | -48% | -58% | +12% |
+| Full Stack | +5% | +5% | -38% |
 
-This MVP keeps the strict role restrictions in the brief: specialists only do their own task type, while Full Stack handles Frontend and Backend. Chances are clamped to 12–96% so every legal attempt retains some uncertainty.
+Every developer may attempt every task. Matching specialists are reliable, while cross-role assignments take severe penalties but always retain a slim chance to work. Full Stack remains close to a specialist on Frontend and Backend but struggles on Mobile. Chances are clamped to 5–96% so even a desperate mismatch can occasionally become a memorable save.
 
 A failed attempt gives that task a failure mark. Each mark adds a flat +6 percentage points to later attempts. This linear increase rewards persistence without letting failure snowball exponentially.
 
-Dependencies add the listed coupling bonus once their prerequisite task succeeds. Because sequences resolve from 1 through 8, a prerequisite placed earlier in the same sprint can improve a dependent attempt later in that sprint. Parallel attempts in the same sequence do not receive a dependency that only completes in that sequence.
+Dependencies add the listed coupling bonus once their prerequisite task succeeds. Because sequences resolve from 1 through 4, a prerequisite placed earlier in the same sprint can improve a dependent attempt later in that sprint. Parallel attempts in the same sequence do not receive a dependency that only completes in that sequence.
 
 ## Sprint planner
 
-A turn contains eight numbered sequences. Each deployed developer gets one action cell per sequence, so a developer can spend at most eight tickets. Skipping an early sequence does not preserve the ticket: only the remaining sequence cells can be used.
+A turn contains four numbered sequences. Each deployed developer gets one action cell per sequence, so a developer can spend at most four tickets. Skipping an early sequence does not preserve the ticket: only the remaining sequence cells can be used.
 
 Available actions are:
 
-- **Work:** explicitly choose one compatible, incomplete project task to attempt. The picker previews its current success chance.
-- **Taunt:** attack a developer in the directly opposing open-space slot; against an opposing cubicle or empty slot, damage goes to the rival lead.
+- **Work:** explicitly choose any incomplete project task to attempt. The picker previews the current success chance and makes cross-role penalties visible.
+- **Taunt:** leave the planner, then choose a specific developer in the directly opposing open-space slot. Against an opposing cubicle or empty slot, selecting that lane redirects damage to the rival lead.
 - **Skip:** do nothing in this sequence.
 
-Different developers act in parallel inside a sequence. Sequences resolve at a deliberately paced interval, with acting and target markers on the 3D board, so task completion, failure marks, sanity damage, quitting, project completion, and Brags remain readable.
+Different developers are scheduled in parallel inside a sequence, but the battle presentation reveals them one by one so every result is readable. Each sequence gets a full-screen announcement. The current actor leaves the board and appears on a dedicated action stage: Skip receives a visible stamp, Taunt shows attacker and target with animated sanity loss, and Work shows the task beside a percentage wheel before project progress advances. The rival team receives the same presentation.
 
 The planner is an editor, not a commit action. **Save sprint plan** closes it while preserving the queue, allowing the player to inspect the board or revise the plan again. The separate circular **Sprint!** control is the only way to launch the queue. It opens a final warning with the active project and assigned-action count; confirming ends the planning phase and begins sequence resolution. Launching an empty queue is allowed but called out explicitly.
 
@@ -65,6 +65,7 @@ The planner is an editor, not a commit action. **Save sprint plan** closes it wh
 - Opening hand / hand limit: 5
 - Deck limit: 20; copy limit: 3
 - Work areas: 4 per player
+- Action sequences per sprint: 4
 - Open-space capacity: 4; cubicle capacity: 2
 - Failure-mark bonus: +6 percentage points each
 - Abandon cost: 3 lead sanity

@@ -1,6 +1,6 @@
 # Dev On!
 
-A local-first Next.js MVP for a tactical programming-themed card battler. Build a 20-card developer deck, configure four work areas, claim projects from a shared backlog, and resolve eight-sequence sprints against a computer opponent.
+A local-first Next.js MVP for a tactical programming-themed card battler. Build a 20-card developer deck, configure four work areas, claim projects from a shared backlog, and resolve four-sequence sprints against a computer opponent.
 
 ## Run locally
 
