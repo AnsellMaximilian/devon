@@ -576,7 +576,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       setHighlight({ actorId: actor.instanceId, targetId: target?.instanceId ?? leadId, kind: "taunt" });
       setActionStage(baseStage);
       setEvent(`${dev.name} lines up a taunt.`); setEventTone("neutral");
-      await wait(800);
+      await wait(1050);
 
       let message: string;
       let after: number;
@@ -599,7 +599,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       commitBattleState();
       setActionStage({ ...baseStage, phase: "result", message, targetSanityAfter: after });
       setEvent(message); setEventTone(owner === "player" ? "good" : "bad");
-      await wait(1850);
+      await wait(2200);
       await clearActionStage();
     };
 
@@ -901,21 +901,22 @@ function ActionStageView({ stage }: { stage: ActionStage }) {
     <div className="action-stage-heading"><span>SEQUENCE {String(stage.sequence).padStart(2, "0")} / {String(SEQUENCE_COUNT).padStart(2, "0")}</span><b>{stage.owner === "player" ? "YOUR DEVELOPER" : "RIVAL DEVELOPER"}</b></div>
     <div className="action-stage-arena">
       <article className="stage-developer-card actor-card" style={{ "--accent": actor.accent } as React.CSSProperties}>
-        <div className="stage-card-art"><img src={actor.art} alt={actor.name} />{stage.kind === "skip" && <strong className="skip-stamp">SKIP</strong>}{stage.kind === "taunt" && <div className="taunt-punctuation" aria-hidden="true"><i>!</i><i>!</i><i>?</i></div>}</div>
+        <div className="stage-card-art"><img src={actor.art} alt={actor.name} />{stage.kind === "skip" && <strong className="skip-stamp">SKIP</strong>}</div>
+        {stage.kind === "taunt" && <img className="taunt-bubble-asset" src="/ui/taunt-bubble.png" alt="" aria-hidden="true" />}
         <div className="stage-card-copy"><small>{actor.role}</small><b>{actor.name}</b><span><Brain size={13} /> {stage.actor.sanity} sanity</span></div>
       </article>
 
       <div className="stage-action-core">
         {stage.kind === "skip" && <div className="stage-skip-symbol"><Minus /><b>NO ACTION</b><small>Ticket unused</small></div>}
-        {stage.kind === "taunt" && <div className="stage-taunt-symbol"><span>!</span><span>!</span><b>{stage.phase === "result" ? `-${stage.damage}` : "TAUNT"}</b></div>}
-        {stage.kind === "work" && <div className="chance-wheel-wrap"><div className="chance-wheel" style={{ "--chance-angle": `${chance * 3.6}deg`, "--roll-angle": `${roll * 3.6}deg` } as React.CSSProperties}><span className="chance-needle" /><span className="chance-center"><b>{stage.phase === "result" ? roll : chance}%</b><small>{stage.phase === "result" ? "ROLL" : "SUCCESS"}</small></span></div><em>{stage.phase === "rolling" ? "ROLLING…" : stage.success ? "COMPILED!" : "BUILD FAILED"}</em></div>}
+        {stage.kind === "taunt" && <div className="stage-taunt-impact" aria-hidden="true"><span><i /><i /><i /></span><b>-{stage.damage}</b></div>}
+        {stage.kind === "work" && <div className="chance-wheel-wrap"><div className="chance-wheel" style={{ "--chance-angle": `${chance * 3.6}deg`, "--roll-angle": `${roll * 3.6}deg` } as React.CSSProperties}><span className="chance-needle" /><span className="chance-center"><b>{chance}%</b><small>SUCCESS</small></span></div><em>{stage.phase === "rolling" ? "ROLLING…" : stage.success ? "COMPILED!" : "BUILD FAILED"}</em></div>}
       </div>
 
       {stage.kind === "work" && stage.task ? <article className="stage-work-card" style={{ "--project": stage.projectAccent } as React.CSSProperties}>
         <span className={`role-dot ${stage.task.type.toLowerCase()}`} /><small>{stage.task.type} REQUIREMENT</small><b>{stage.task.title}</b><p>Base reward <strong>+{stage.task.points} MVP</strong></p><div><Code2 /><span><b>{chance}% chance</b><small>Role modifier {ROLE_CHANCES[actor.role][stage.task.type] >= 0 ? "+" : ""}{ROLE_CHANCES[actor.role][stage.task.type]}%</small></span></div>
       </article> : stage.kind === "taunt" ? <article className={`stage-developer-card target-card ${stage.targetIsLead ? "lead-card" : ""}`} style={{ "--accent": target?.accent ?? "#ff4f8d", "--sanity-before": `${sanityBefore}%`, "--sanity-after": `${sanityAfter}%` } as React.CSSProperties}>
         {target ? <div className="stage-card-art"><img src={target.art} alt={target.name} /></div> : <div className="stage-lead-art"><Brain /><span>TEAM LEAD</span></div>}
-        <div className="stage-card-copy"><small>{target?.role ?? "PLAYER SANITY"}</small><b>{targetName}</b><span><Brain size={13} /> {stage.targetSanityAfter ?? stage.targetSanityBefore}/{targetMax}</span><div className="stage-sanity-meter"><i /></div></div>
+        <div className="stage-card-copy"><small>{target?.role ?? "PLAYER SANITY"}</small><b>{targetName}</b><span className="stage-sanity-readout"><Brain size={13} /><span><i>{stage.targetSanityBefore}</i><i>{stage.targetSanityAfter ?? stage.targetSanityBefore}</i></span>/{targetMax}</span><div className="stage-sanity-meter"><i /></div></div>
       </article> : <div className="stage-empty-ticket"><Ticket /><b>EMPTY TICKET</b><small>This developer waits for the next sequence.</small></div>}
     </div>
 
