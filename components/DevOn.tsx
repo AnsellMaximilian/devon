@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ArrowLeft, BookOpen, Brain, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleHelp, Code2, DoorOpen, Hand, Home as HomeIcon, Layers3, LockKeyhole, Menu, Minus, MousePointer2, Play, Plus, RotateCcw, Settings, Shield, Sparkles, Swords, Ticket, Trophy, Users, Volume2, VolumeX, X, Zap, ZoomIn, ZoomOut } from "lucide-react";
 import { DevCard } from "./DevCard";
 import { DEVELOPERS, PROJECTS, ROLE_CHANCES, getDeveloper, type AreaType, type Developer, type Project, type ProjectTask } from "@/lib/game-data";
+import { playSfx, preloadSfx, stopAllSfx, type SoundEffect } from "@/lib/sound";
 
 type View = "home" | "deck" | "battle";
 type Owner = "player" | "enemy";
@@ -187,6 +188,8 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
   const [announcement, setAnnouncement] = useState<StageAnnouncement | null>({ key: 0, title: "OFFICE SETUP", subtitle: "Build your workspace before the first sprint", tone: "lime" });
   const cameraHoldDelay = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cameraHoldInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const soundEnabled = useRef(true);
+  const lastDrawSoundKey = useRef<number | null>(null);
   const areaPointerDrag = useRef<{ area: AreaType; pointerId: number; startX: number; startY: number; dragging: boolean; slotIndex: number | null } | null>(null);
   const suppressAreaClick = useRef(false);
   const developerPointerDrag = useRef<{ handIndex: number; devId: string; pointerId: number; startX: number; startY: number; dragging: boolean; desk: { slotIndex: number; position: number } | null } | null>(null);
@@ -198,6 +201,17 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
   const setupReady = configuredAreas === 4;
   const deckRemaining = Math.max(0, shuffledDeck.current.length - drawIndex);
   const plannedActions = Object.values(plan).filter((action) => action !== "skip").length;
+  const playBattleSound = (effect: SoundEffect) => playSfx(effect, soundEnabled.current);
+
+  useEffect(() => {
+    preloadSfx();
+    return () => stopAllSfx();
+  }, []);
+
+  useEffect(() => {
+    soundEnabled.current = soundOn;
+    if (!soundOn) stopAllSfx();
+  }, [soundOn]);
 
   useEffect(() => {
     if (!announcement) return;
@@ -214,6 +228,10 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
   useEffect(() => {
     if (!turnDrawEvent) return;
     const draw = turnDrawEvent;
+    if (lastDrawSoundKey.current !== draw.key) {
+      lastDrawSoundKey.current = draw.key;
+      playSfx("cardDeal", soundEnabled.current);
+    }
     const handTimer = setTimeout(() => {
       setHand((current) => [...current, ...draw.cards].slice(0, 5));
       setHandArrival({ key: draw.key, count: draw.cards.length });
@@ -262,6 +280,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     setLastAreaInstall({ slot: slotIndex, key: Date.now() });
     setEvent(`${area === "open" ? "Open Space" : "Cubicles"} ${slot.type ? "replaced" : "installed"} in Work Area ${slotIndex + 1}.`);
     setEventTone("good");
+    playBattleSound("officePlace");
   };
 
   const endAreaDrag = () => { areaPointerDrag.current = null; setDraggedArea(null); setDragPointer(null); setHoveredAreaSlot(null); };
@@ -358,6 +377,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
 
   const finishSetup = () => {
     if (!setupReady) return;
+    playBattleSound("uiConfirm");
     setSelectedArea(null); endAreaDrag();
     setProjectNudge(null);
     setPhase("plan");
@@ -379,6 +399,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     setPlayerSlots((slots) => slots.map((s, i) => i === slotIndex ? { ...s, developers: [...s.developers, instance] } : s));
     setHand((h) => h.filter((_, i) => i !== handIndex));
     setEvent(`${dev.name} took Desk ${position + 1} in Work Area ${slotIndex + 1}.`); setEventTone("good");
+    playBattleSound("cardPlace");
   };
 
   const claimProject = (id: string) => {
@@ -390,6 +411,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     setProjectNudge(null);
     setProjectModalOpen(false);
     setEvent(`${target.name} locked. Time to plan the sprint.`); setEventTone("good");
+    playBattleSound("projectLock");
   };
 
   const abandon = () => {
@@ -397,6 +419,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     setPlayerSanity((s) => Math.max(0, s - 3));
     setProjects((ps) => ps.map((p) => p.id === playerProject.id ? { ...p, claimedBy: null, progress: 0, tasksState: Object.fromEntries(p.tasks.map((t) => [t.id, { completed: false, marks: 0 }])) } : p));
     setEvent("Project abandoned. Your reputation takes 3 sanity damage."); setEventTone("bad");
+    playBattleSound("sanityDrop");
   };
 
   const openProjectPicker = () => {
@@ -441,6 +464,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     setPlannerOpen(true);
     setEvent("Taunt target locked. Finish planning the sprint.");
     setEventTone("good");
+    playBattleSound("uiConfirm");
   };
 
   const cancelTauntTarget = () => {
@@ -492,6 +516,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     if (!playerProject) { setEvent("Claim a project before running the sprint."); setEventTone("bad"); setPlannerOpen(false); return; }
     if (playerSlots.some((slot) => !slot.type)) { setEvent("Install all four work-area cards before running the sprint."); setEventTone("bad"); setPlannerOpen(false); return; }
     setPlannerOpen(false); setSprintConfirmOpen(false); setTauntTargetRequest(null); setPhase("resolving");
+    playBattleSound("uiConfirm");
     let pSlots = playerSlots.map((s) => ({ ...s, developers: s.developers.map((d) => ({ ...d })) }));
     let eSlots = enemySlots.map((s) => ({ ...s, developers: s.developers.map((d) => ({ ...d })) }));
     let ps = projects.map((p) => ({ ...p, tasksState: Object.fromEntries(Object.entries(p.tasksState).map(([k, v]) => [k, { ...v }])) }));
@@ -522,6 +547,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       setHighlight({ actorId: actor.instanceId, kind: "skip" });
       setActionStage({ key, sequence, owner, actor: { ...actor }, kind: "skip", phase: "result", message });
       setEvent(`${dev.name}: ${message}`); setEventTone("neutral");
+      playBattleSound("skip");
       await wait(1200);
       await clearActionStage();
     };
@@ -540,10 +566,12 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       setHighlight({ actorId: actor.instanceId, kind: "work" });
       setActionStage(baseStage);
       setEvent(`${dev.name} is working on ${task.title}…`); setEventTone("neutral");
+      playBattleSound("wheelSpin");
       await wait(1550);
 
       let points = task.points;
       let message: string;
+      let projectJustCompleted = false;
       if (success) {
         project.tasksState[task.id].completed = true;
         const coworkers = actorSlots[actor.slot].developers.map((d) => d.devId);
@@ -553,6 +581,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
         message = `${dev.name} shipped ${task.title} · +${points} MVP`;
         if (project.progress >= project.mvp) {
           project.completed = true;
+          projectJustCompleted = true;
           if (owner === "player") {
             queuedBrags.push(project.brag);
             pProjectId = undefined;
@@ -571,7 +600,10 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       commitBattleState();
       setActionStage({ ...baseStage, phase: "result", success, message, projectAfter: project.progress });
       setEvent(message); setEventTone(success ? owner === "player" ? "good" : "bad" : owner === "player" ? "bad" : "good");
-      await wait(success ? 2050 : 1650);
+      await wait(900);
+      playBattleSound("needleLand");
+      playBattleSound(projectJustCompleted ? "projectComplete" : success ? "workSuccess" : "workFail");
+      await wait((success ? 2050 : 1650) - 900);
       await clearActionStage();
     };
 
@@ -595,6 +627,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       setHighlight({ actorId: actor.instanceId, targetId: target?.instanceId ?? leadId, kind: "taunt" });
       setActionStage(baseStage);
       setEvent(`${dev.name} lines up a taunt.`); setEventTone("neutral");
+      playBattleSound("taunt");
       await wait(1050);
 
       let message: string;
@@ -618,6 +651,8 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       commitBattleState();
       setActionStage({ ...baseStage, phase: "result", message, targetSanityAfter: after });
       setEvent(message); setEventTone(owner === "player" ? "good" : "bad");
+      playBattleSound("impact");
+      setTimeout(() => playBattleSound("sanityDrop"), 90);
       await wait(2200);
       await clearActionStage();
     };
@@ -627,6 +662,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       setSeqActive(seq);
       setActionStage(null); setHighlight(null);
       showAnnouncement(`SEQUENCE ${String(seq).padStart(2, "0")}`, `Ticket lane ${seq} of ${SEQUENCE_COUNT} · your team acts first`, "cyan");
+      playBattleSound("sequenceStart");
       await wait(1650);
       setAnnouncement(null);
       await wait(180);
@@ -675,7 +711,10 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       if (pSan <= 0 || eSan <= 0) break;
     }
     setActionStage(null); setHighlight(null);
-    if (pSan <= 0 || eSan <= 0) { setWinner(pSan > 0 ? "player" : "enemy"); setPhase("gameover"); return; }
+    if (pSan <= 0 || eSan <= 0) {
+      const matchWinner = pSan > 0 ? "player" : "enemy";
+      setWinner(matchWinner); setPhase("gameover"); playBattleSound(matchWinner === "player" ? "victory" : "defeat"); return;
+    }
     setSeqActive(null);
     if (queuedBrags.length) { setPhase("brag"); setEvent("Project complete. Brag now—or bank it and end the sprint."); setEventTone("good"); }
     else advanceTurn(ps, aiProjectId);
@@ -685,14 +724,25 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     if (!brags.length) return;
     const hit = brags[0]; const remaining = brags.slice(1); const nextEnemy = Math.max(0, enemySanity - hit);
     setEnemySanity(nextEnemy); setBrags(remaining); setEvent(`You shipped it and bragged for ${hit} sanity damage!`); setEventTone("good");
-    if (nextEnemy <= 0) { setWinner("player"); setPhase("gameover"); return; }
+    playBattleSound("brag");
+    if (nextEnemy <= 0) { setWinner("player"); setPhase("gameover"); setTimeout(() => playBattleSound("victory"), 650); return; }
     // One brag per turn; extra brags remain banked.
     setTimeout(() => advanceTurn(projects, projects.find((p) => p.claimedBy === "enemy" && !p.completed)?.id), 500);
   };
 
-  const skipBrag = () => advanceTurn(projects, projects.find((p) => p.claimedBy === "enemy" && !p.completed)?.id);
+  const skipBrag = () => { playBattleSound("skip"); advanceTurn(projects, projects.find((p) => p.claimedBy === "enemy" && !p.completed)?.id); };
+
+  const toggleSound = () => {
+    const enabled = !soundEnabled.current;
+    soundEnabled.current = enabled;
+    setSoundOn(enabled);
+    if (enabled) playSfx("uiConfirm", true);
+    else stopAllSfx();
+  };
 
   const resetBattle = () => {
+    stopAllSfx();
+    playBattleSound("uiConfirm");
     shuffledDeck.current = [...deck].sort(() => Math.random() - .5);
     setDrawIndex(5);
     setHand(shuffledDeck.current.slice(0, 5));
@@ -781,7 +831,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       <header><img src="/brand/dev-on-mark.png" alt="" /><div><span className="eyebrow-small">BATTLE PAUSED</span><h2>Dev On! menu</h2><p>Adjust the session or review the essentials.</p></div><button onClick={() => setMenuOpen(false)} aria-label="Close battle menu"><X /></button></header>
       {menuHelpOpen ? <div className="battle-menu-help"><div><BookOpen size={22} /><span><b>Battle essentials</b><small>Quick rules reference</small></span></div><ol><li>Claim one project and deploy developers into configured offices.</li><li>Plan up to four action sequences. Developers can work in parallel.</li><li>Complete the MVP, then Brag to damage the rival lead&apos;s sanity.</li><li>Developers at zero sanity enter the Unemployment pile.</li></ol><button className="menu-row" onClick={() => setMenuHelpOpen(false)}><ArrowLeft /><span><b>Back to menu</b><small>Return to session controls</small></span></button></div> : <div className="battle-menu-options">
         <button className="menu-row primary" onClick={() => setMenuOpen(false)}><Play /><span><b>Continue battle</b><small>Return to the board</small></span><ChevronRight /></button>
-        <button className="menu-row" onClick={() => setSoundOn((enabled) => !enabled)}>{soundOn ? <Volume2 /> : <VolumeX />}<span><b>Sound effects</b><small>{soundOn ? "Enabled" : "Muted"}</small></span><em className={soundOn ? "on" : ""}>{soundOn ? "ON" : "OFF"}</em></button>
+        <button className="menu-row" onClick={toggleSound}>{soundOn ? <Volume2 /> : <VolumeX />}<span><b>Sound effects</b><small>{soundOn ? "Enabled" : "Muted"}</small></span><em className={soundOn ? "on" : ""}>{soundOn ? "ON" : "OFF"}</em></button>
         <button className="menu-row" onClick={() => setMenuHelpOpen(true)}><CircleHelp /><span><b>How to play</b><small>Review the battle loop</small></span><ChevronRight /></button>
         <button className="menu-row" onClick={resetBattle}><RotateCcw /><span><b>Restart battle</b><small>Return to office setup</small></span></button>
         <button className="menu-row danger" onClick={onExit}><HomeIcon /><span><b>Main menu</b><small>Leave this battle</small></span></button>
