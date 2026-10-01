@@ -17,6 +17,7 @@ type BattlePhase = "setup" | "plan" | "resolving" | "brag" | "gameover";
 type InspectedDeveloper = { devId: string; placed?: PlacedDev; owner?: Owner; handIndex?: number };
 type StageAnnouncement = { key: number; title: string; subtitle: string; tone: "cyan" | "lime" | "pink" };
 type TauntTargetRequest = { key: string; placed: PlacedDev; sequence: number };
+type TurnDrawEvent = { key: number; cards: string[] };
 type ActionStage = {
   key: number;
   sequence: number;
@@ -180,6 +181,8 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
   const [highlight, setHighlight] = useState<ActionHighlight | null>(null);
   const [actionStage, setActionStage] = useState<ActionStage | null>(null);
   const [tauntTargetRequest, setTauntTargetRequest] = useState<TauntTargetRequest | null>(null);
+  const [turnDrawEvent, setTurnDrawEvent] = useState<TurnDrawEvent | null>(null);
+  const [handArrival, setHandArrival] = useState<{ key: number; count: number } | null>(null);
   const [inspectedDeveloper, setInspectedDeveloper] = useState<InspectedDeveloper | null>(null);
   const [announcement, setAnnouncement] = useState<StageAnnouncement | null>({ key: 0, title: "OFFICE SETUP", subtitle: "Build your workspace before the first sprint", tone: "lime" });
   const cameraHoldDelay = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -207,6 +210,20 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     const timer = setTimeout(() => setProjectNudge(null), 3600);
     return () => clearTimeout(timer);
   }, [projectNudge]);
+
+  useEffect(() => {
+    if (!turnDrawEvent) return;
+    const draw = turnDrawEvent;
+    const handTimer = setTimeout(() => {
+      setHand((current) => [...current, ...draw.cards].slice(0, 5));
+      setHandArrival({ key: draw.key, count: draw.cards.length });
+    }, 3000);
+    const clearTimer = setTimeout(() => {
+      setTurnDrawEvent((current) => current?.key === draw.key ? null : current);
+      setHandArrival((current) => current?.key === draw.key ? null : current);
+    }, 3850);
+    return () => { clearTimeout(handTimer); clearTimeout(clearTimer); };
+  }, [turnDrawEvent]);
 
   useEffect(() => () => {
     if (cameraHoldDelay.current) clearTimeout(cameraHoldDelay.current);
@@ -413,7 +430,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
   const requestTauntTarget = (key: string, placedDev: PlacedDev, sequence: number) => {
     setPlannerOpen(false);
     setTauntTargetRequest({ key, placed: placedDev, sequence });
-    setEvent(`${getDeveloper(placedDev.devId).name} can taunt targets in rival Work Area ${4 - placedDev.slot}.`);
+    setEvent(`${getDeveloper(placedDev.devId).name} can taunt targets directly ahead in rival Work Area ${placedDev.slot + 1}.`);
     setEventTone("neutral");
   };
 
@@ -459,15 +476,15 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     setTurn((t) => t + 1);
     const nepotism = playerSlots.some((s) => s.type === "open" && s.developers.some((d) => d.devId === "chad"));
     const draws = nepotism ? 2 : 1;
-    setHand((h) => {
-      const room = Math.max(0, 5 - h.length);
-      const count = Math.min(draws, room, Math.max(0, shuffledDeck.current.length - drawIndex));
-      const cards = shuffledDeck.current.slice(drawIndex, drawIndex + count);
+    const room = Math.max(0, 5 - hand.length);
+    const count = Math.min(draws, room, Math.max(0, shuffledDeck.current.length - drawIndex));
+    const cards = shuffledDeck.current.slice(drawIndex, drawIndex + count);
+    if (count) {
       setDrawIndex((i) => i + count);
-      return [...h, ...cards];
-    });
+      setTurnDrawEvent({ key: Date.now(), cards });
+    }
     setPlan({}); setPhase("plan"); setSeqActive(null); setActionStage(null); setTauntTargetRequest(null);
-    setEvent(nepotism ? "New sprint. Nepotism pulled an extra résumé." : "New sprint. One developer joined your hand."); setEventTone("neutral");
+    setEvent(count ? nepotism && count > 1 ? "New sprint. Nepotism pulled two new résumés." : "New sprint. A developer is joining your hand." : hand.length >= 5 ? "New sprint. Your hand is full, so no developer was drawn." : "New sprint. Your draw pile is empty."); setEventTone("neutral");
     showAnnouncement("YOUR TURN", `Sprint ${String(turn + 1).padStart(2, "0")} · Plan your next sequence`, "cyan");
   };
 
@@ -559,7 +576,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
     const playTaunt = async (owner: Owner, actor: PlacedDev, sequence: number, requestedTargetId?: string) => {
       const dev = getDeveloper(actor.devId);
       const defendingSlots = owner === "player" ? eSlots : pSlots;
-      const targetSlot = defendingSlots[3 - actor.slot];
+      const targetSlot = defendingSlots[actor.slot];
       const leadId = owner === "player" ? "enemy-lead" : "player-lead";
       const leadBefore = owner === "player" ? eSan : pSan;
       const forcedLead = targetSlot.type === "cubicle" || !targetSlot.developers.length || requestedTargetId === leadId;
@@ -637,7 +654,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
         const dev = getDeveloper(actor.devId);
         const ap = ps.find((project) => project.id === aiProjectId && !project.completed);
         if (Math.random() < .20) {
-          const targetSlot = pSlots[3 - actor.slot];
+          const targetSlot = pSlots[actor.slot];
           const target = targetSlot.type === "open" && targetSlot.developers.length ? targetSlot.developers[Math.floor(Math.random() * targetSlot.developers.length)].instanceId : "player-lead";
           await playTaunt("enemy", actor, seq, target);
         } else if (!ap || Math.random() < .18) {
@@ -684,7 +701,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       { type: "open", developers: [{ instanceId: "cpu-wendy", devId: "wendy", sanity: 9, slot: 2, position: 0 }] },
       { type: "cubicle", developers: [] }
     ]);
-    setDeckOpen(false); setMenuOpen(false); setMenuHelpOpen(false); setUnemployment([]); setSelectedArea(null); endAreaDrag(); endDeveloperDrag(); setLastAreaInstall(null);
+    setDeckOpen(false); setMenuOpen(false); setMenuHelpOpen(false); setUnemployment([]); setSelectedArea(null); endAreaDrag(); endDeveloperDrag(); setLastAreaInstall(null); setTurnDrawEvent(null); setHandArrival(null);
     const nextProjects = freshProjects();
     nextProjects[1].claimedBy = "enemy";
     setProjects(nextProjects);
@@ -728,12 +745,13 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
       </div>
       {announcement && <div key={announcement.key} className={`stage-announcement ${announcement.tone}`}><small>{phase === "setup" ? "PRE-BATTLE" : "ACTIVE PLAYER"}</small><b>{announcement.title}</b><span>{announcement.subtitle}</span></div>}
       {phase === "plan" && projectNudge && <div key={projectNudge} className="project-required-warning" role="status" aria-live="polite"><AlertTriangle size={18} /><span><b>SELECT A PROJECT FIRST</b><small>Claim work from the shared backlog, then plan your sprint.</small></span></div>}
-      {phase === "plan" && tauntTargetRequest && <div className="taunt-target-prompt" role="status" aria-live="polite"><AlertTriangle size={20} /><span><b>CHOOSE A TAUNT TARGET</b><small>{getDeveloper(tauntTargetRequest.placed.devId).name} can hit rival Work Area {4 - tauntTargetRequest.placed.slot}. Select a highlighted developer; cubicles redirect the hit to the rival lead.</small></span><button onClick={cancelTauntTarget}>Cancel</button></div>}
+      {phase === "plan" && tauntTargetRequest && <div className="taunt-target-prompt" role="status" aria-live="polite"><AlertTriangle size={20} /><span><b>CHOOSE A TAUNT TARGET</b><small>{getDeveloper(tauntTargetRequest.placed.devId).name} can hit rival Work Area {tauntTargetRequest.placed.slot + 1}, directly ahead. Select a highlighted developer; cubicles redirect the hit to the rival lead.</small></span><button onClick={cancelTauntTarget}>Cancel</button></div>}
       {phase === "setup" && !announcement && configuredAreas === 0 && <div className="setup-drag-hint"><b>PLACE YOUR OFFICE SPACES</b><span>Drag space cards into slots</span></div>}
       {phase === "setup" && !announcement && <div className="setup-card-tray" aria-label="Reusable office space cards"><OfficeCard area="open" selected={selectedArea === "open"} dragging={draggedArea === "open"} onClick={() => selectAreaCard("open")} onPointerDown={(event) => startAreaPointer(event, "open")} onPointerMove={moveAreaPointer} onPointerUp={finishAreaPointer} onPointerCancel={cancelAreaPointer} /><OfficeCard area="cubicle" selected={selectedArea === "cubicle"} dragging={draggedArea === "cubicle"} onClick={() => selectAreaCard("cubicle")} onPointerDown={(event) => startAreaPointer(event, "cubicle")} onPointerMove={moveAreaPointer} onPointerUp={finishAreaPointer} onPointerCancel={cancelAreaPointer} /></div>}
       {phase === "setup" && <div className="setup-deck-preview"><DrawPile remaining={deck.length} total={deck.length} label="YOUR DECK" onOpen={() => setDeckOpen(true)} /></div>}
       {phase === "setup" && <div className="setup-ready-panel"><div><span>OFFICE LAYOUT</span><b>{configuredAreas}<small>/4</small></b><p>{setupReady ? "Every bay is configured." : selectedArea ? `Click a bay to place ${selectedArea === "open" ? "Open Space" : "Cubicles"}.` : "Drag a reusable space card into each bay."}</p></div><button onClick={finishSetup} disabled={!setupReady}><Check size={18} /><span><b>READY</b><small>{setupReady ? "Begin Sprint 01" : `${4 - configuredAreas} bays remaining`}</small></span></button></div>}
       {phase === "resolving" && actionStage && <ActionStageView stage={actionStage} />}
+      {turnDrawEvent && <TurnDrawEventView draw={turnDrawEvent} />}
     </div>
 
     {phase !== "setup" && <div className="battle-dock"><div className="bottom-command-panel">
@@ -741,7 +759,7 @@ function Battle({ deck, onExit }: { deck: string[]; onExit: () => void }) {
           <DrawPile remaining={deckRemaining} total={shuffledDeck.current.length} onOpen={() => setDeckOpen(true)} />
           <UnemploymentPile developers={unemployment} />
         </div>
-        <div className="hand-zone"><div className="hand-label"><span><Hand size={15} /> DEVELOPER HAND</span><small>Click to inspect · drag onto an exact desk</small></div><div className="hand-cards fanned">{hand.map((id, i) => { const dev = getDeveloper(id); const offset = i - (hand.length - 1) / 2; return <div className={`hand-drag-card ${draggedDeveloper?.handIndex === i ? "dragging" : ""}`} style={{ "--fan-angle": `${offset * 3.5}deg`, "--fan-y": `${Math.abs(offset) * 3}px`, zIndex: i + 1 } as React.CSSProperties} onClick={() => inspectHandDeveloper(id, i)} onPointerDown={(event) => startDeveloperPointer(event, i, id)} onPointerMove={moveDeveloperPointer} onPointerUp={finishDeveloperPointer} onPointerCancel={cancelDeveloperPointer} key={`${id}-${i}`}><DevCard dev={dev} compact /></div>; })}{Array.from({ length: Math.max(0, 5 - hand.length) }).map((_, i) => <div className="empty-hand" key={i}><Code2 /></div>)}</div></div>
+        <div className="hand-zone"><div className="hand-label"><span><Hand size={15} /> DEVELOPER HAND</span><small>Click to inspect · drag onto an exact desk</small></div><div className="hand-cards fanned">{hand.map((id, i) => { const dev = getDeveloper(id); const offset = i - (hand.length - 1) / 2; const arriving = !!handArrival && i >= hand.length - handArrival.count; return <div className={`hand-drag-card ${draggedDeveloper?.handIndex === i ? "dragging" : ""} ${arriving ? "draw-arrival" : ""}`} style={{ "--fan-angle": `${offset * 3.5}deg`, "--fan-y": `${Math.abs(offset) * 3}px`, zIndex: i + 1 } as React.CSSProperties} onClick={() => inspectHandDeveloper(id, i)} onPointerDown={(event) => startDeveloperPointer(event, i, id)} onPointerMove={moveDeveloperPointer} onPointerUp={finishDeveloperPointer} onPointerCancel={cancelDeveloperPointer} key={`${id}-${i}`}><DevCard dev={dev} compact /></div>; })}{Array.from({ length: Math.max(0, 5 - hand.length) }).map((_, i) => <div className="empty-hand" key={i}><Code2 /></div>)}</div></div>
         <div className="battle-actions">
           {phase === "plan" && <div className="sprint-controls"><button className="sprint-button" onClick={openSprintConfirmation} aria-label="Run sprint and end turn"><img src="/ui/sprint-button.png" alt="" /><span>SPRINT!</span></button><button className="plan-queue-button" onClick={openSprintPlanner}><Ticket size={15} /><span>PLAN</span><em>{plannedActions}</em></button></div>}
           {phase === "resolving" && <div className="resolving-button"><span className="spinner" /><div><b>SPRINT IN PROGRESS</b><small>Actions resolve in sequence</small></div></div>}
@@ -866,7 +884,7 @@ function ProjectPicker({ projects, activeProject, onClaim, onAbandon, onClose, c
 function BoardSlotView({ slot, index, owner, setupMode = false, selectedArea, draggedArea, dragOver = false, draggedDeveloper, hoveredDeskPosition, justPlaced = false, onConfigure, onInspect, highlight, tauntTargetRequest, onSelectTauntTarget }: { slot: BoardSlot; index: number; owner: Owner; setupMode?: boolean; selectedArea?: AreaType | null; draggedArea?: AreaType | null; dragOver?: boolean; draggedDeveloper?: { handIndex: number; devId: string } | null; hoveredDeskPosition?: number | null; justPlaced?: boolean; onConfigure?: (area: AreaType) => void; onInspect?: (placed: PlacedDev) => void; highlight?: ActionHighlight | null; tauntTargetRequest?: TauntTargetRequest | null; onSelectTauntTarget?: (targetId: string) => void }) {
   const cap = slot.type === "open" ? 4 : slot.type === "cubicle" ? 2 : 0;
   const readyForDev = !!slot.type && !!draggedDeveloper && slot.developers.length < cap;
-  const isTauntLane = owner === "enemy" && !!tauntTargetRequest && index === 3 - tauntTargetRequest.placed.slot;
+  const isTauntLane = owner === "enemy" && !!tauntTargetRequest && index === tauntTargetRequest.placed.slot;
   const redirectsToLead = isTauntLane && (slot.type === "cubicle" || !slot.developers.length);
   const handleSlotClick = () => {
     if (redirectsToLead) { onSelectTauntTarget?.("enemy-lead"); return; }
@@ -885,6 +903,15 @@ function BoardSlotView({ slot, index, owner, setupMode = false, selectedArea, dr
   </div>;
 }
 
+function TurnDrawEventView({ draw }: { draw: TurnDrawEvent }) {
+  return <div className="turn-draw-event" role="status" aria-live="polite">
+    <div className="turn-draw-heading"><small>TURN START · DRAW PHASE</small><b>{draw.cards.length > 1 ? "NEW DEVELOPERS!" : "NEW DEVELOPER!"}</b><span>{draw.cards.length > 1 ? `${draw.cards.length} résumés are joining your hand` : "A résumé is joining your hand"}</span></div>
+    <div className="turn-draw-cards">{draw.cards.map((id, index) => { const dev = getDeveloper(id); const center = index - (draw.cards.length - 1) / 2; return <article className="turn-draw-card" key={`${draw.key}-${index}`} style={{ "--accent": dev.accent, "--draw-x": `${center * 118}px`, "--draw-angle": `${center * 7}deg`, "--draw-delay": `${index * 120}ms` } as React.CSSProperties}>
+      <div><img src={dev.art} alt={dev.name} /></div><small>{dev.role}</small><b>{dev.name}</b><span><Brain size={12} /> {dev.completion}% <i /> <Shield size={12} /> {dev.sanity}</span>
+    </article>; })}</div>
+  </div>;
+}
+
 function ActionStageView({ stage }: { stage: ActionStage }) {
   const actor = getDeveloper(stage.actor.devId);
   const target = stage.target ? getDeveloper(stage.target.devId) : undefined;
@@ -900,11 +927,13 @@ function ActionStageView({ stage }: { stage: ActionStage }) {
   return <div key={stage.key} className={`action-stage ${stage.kind} ${stage.phase} ${stage.success === true ? "success" : stage.success === false ? "failure" : ""}`}>
     <div className="action-stage-heading"><span>SEQUENCE {String(stage.sequence).padStart(2, "0")} / {String(SEQUENCE_COUNT).padStart(2, "0")}</span><b>{stage.owner === "player" ? "YOUR DEVELOPER" : "RIVAL DEVELOPER"}</b></div>
     <div className="action-stage-arena">
-      <article className="stage-developer-card actor-card" style={{ "--accent": actor.accent } as React.CSSProperties}>
-        <div className="stage-card-art"><img src={actor.art} alt={actor.name} />{stage.kind === "skip" && <strong className="skip-stamp">SKIP</strong>}</div>
+      <div className="stage-developer-shell actor-shell">
+        <article className="stage-developer-card actor-card" style={{ "--accent": actor.accent } as React.CSSProperties}>
+          <div className="stage-card-art"><img src={actor.art} alt={actor.name} />{stage.kind === "skip" && <strong className="skip-stamp">SKIP</strong>}</div>
+          <div className="stage-card-copy"><small>{actor.role}</small><b>{actor.name}</b><span><Brain size={13} /> {stage.actor.sanity} sanity</span></div>
+        </article>
         {stage.kind === "taunt" && <img className="taunt-bubble-asset" src="/ui/taunt-bubble.png" alt="" aria-hidden="true" />}
-        <div className="stage-card-copy"><small>{actor.role}</small><b>{actor.name}</b><span><Brain size={13} /> {stage.actor.sanity} sanity</span></div>
-      </article>
+      </div>
 
       <div className="stage-action-core">
         {stage.kind === "skip" && <div className="stage-skip-symbol"><Minus /><b>NO ACTION</b><small>Ticket unused</small></div>}
