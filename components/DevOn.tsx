@@ -17,6 +17,7 @@ type ActionHighlight = { actorId?: string; targetId?: string; kind: "skip" | "wo
 type BattlePhase = "setup" | "initiative" | "deploy" | "plan" | "resolving" | "brag" | "gameover";
 type InitiativeTossState = { winner: Owner; stage: "spinning" | "result" };
 type BragEventState = { key: number; owner: Owner; damage: number; before: number; after: number; current: number; stage: "burst" | "travel" | "drain" };
+type HudDamageState = { key: number; target: Owner; damage: number };
 type InspectedDeveloper = { devId: string; placed?: PlacedDev; owner?: Owner; handIndex?: number };
 type StageAnnouncement = { key: number; title: string; subtitle: string; tone: "cyan" | "lime" | "pink" };
 type TauntTargetRequest = { key: string; placed: PlacedDev; sequence: number };
@@ -305,6 +306,7 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
   const [brags, setBrags] = useState<number[]>([]);
   const [enemyBrags, setEnemyBrags] = useState<number[]>([]);
   const [bragEvent, setBragEvent] = useState<BragEventState | null>(null);
+  const [hudDamage, setHudDamage] = useState<HudDamageState | null>(null);
   const [winner, setWinner] = useState<Owner | null>(null);
   const [initiativeWinner, setInitiativeWinner] = useState<Owner | null>(null);
   const [initiativeToss, setInitiativeToss] = useState<InitiativeTossState | null>(null);
@@ -767,7 +769,7 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
       setDrawIndex((i) => i + count);
       setTurnDrawEvent({ key: Date.now(), cards });
     }
-    setPlan({}); setPhase("plan"); setSeqActive(null); setActionStage(null); setTauntTargetRequest(null);
+    setPlan({}); setPhase("plan"); setSeqActive(null); setActionStage(null); setHudDamage(null); setTauntTargetRequest(null);
     setEvent(count ? nepotism && count > 1 ? "New sprint. Nepotism pulled two new résumés." : "New sprint. A developer is joining your hand." : hand.length >= 5 ? "New sprint. Your hand is full, so no developer was drawn." : "New sprint. Your draw pile is empty."); setEventTone("neutral");
     showAnnouncement("YOUR TURN", `Sprint ${String(turn + 1).padStart(2, "0")} · Plan your next sequence`, "cyan");
   };
@@ -822,6 +824,7 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
     const clearActionStage = async () => {
       setHighlight(null);
       setActionStage(null);
+      setHudDamage(null);
       await wait(180);
     };
 
@@ -937,20 +940,29 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
       }
       setActionStage({ ...baseStage, phase: "result", message, targetSanityAfter: after });
       setEvent(message); setEventTone(owner === "player" ? "good" : "bad");
-      // Direct lead taunts travel from center to the HUD; land the actual
-      // sanity change with that visual impact instead of before the launch.
-      if (!target) await wait(780);
-      commitBattleState();
-      playBattleSound("impact");
-      setTimeout(() => playBattleSound("sanityDrop"), 90);
-      await wait(target ? 2200 : 1420);
+      // Direct lead taunts reach the HUD first. The panel takes the hit,
+      // then the sanity meter drains while the attacker recoils to center.
+      if (!target) {
+        await wait(900);
+        setHudDamage({ key, target: owner === "player" ? "enemy" : "player", damage });
+        playBattleSound("impact");
+        await wait(180);
+        commitBattleState();
+        playBattleSound("sanityDrop");
+        await wait(850);
+      } else {
+        commitBattleState();
+        playBattleSound("impact");
+        setTimeout(() => playBattleSound("sanityDrop"), 90);
+        await wait(2200);
+      }
       await clearActionStage();
     };
 
     for (let seq = 1; seq <= SEQUENCE_COUNT; seq++) {
       const completedAtSequenceStart = new Map(ps.map((project) => [project.id, new Set(project.tasks.filter((task) => project.tasksState[task.id].completed).map((task) => task.id))]));
       setSeqActive(seq);
-      setActionStage(null); setHighlight(null);
+      setActionStage(null); setHighlight(null); setHudDamage(null);
       const firstActor = initiativeWinner ?? "player";
       showAnnouncement(`SEQUENCE ${String(seq).padStart(2, "0")}`, `Ticket lane ${seq} of ${SEQUENCE_COUNT} · ${firstActor === "player" ? "your team" : opponent.teamName} acts first`, firstActor === "player" ? "cyan" : "pink");
       playBattleSound("sequenceStart");
@@ -1012,7 +1024,7 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
       }
       if (pSan <= 0 || eSan <= 0) break;
     }
-    setActionStage(null); setHighlight(null);
+    setActionStage(null); setHighlight(null); setHudDamage(null);
     if (pSan <= 0 || eSan <= 0) {
       const matchWinner = pSan > 0 ? "player" : "enemy";
       if (matchWinner === "player") grantVictoryReward();
@@ -1083,23 +1095,26 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
     setProjects(nextProjects);
     setPlayerSanity(30); setEnemySanity(30); setTurn(1); setCameraX(0); setCameraTilt(52); setCameraZoom(1);
     setPlannerOpen(false); setSprintConfirmOpen(false); setProjectModalOpen(false); setProjectNudge(null); setBragNudge(null); setPlan({}); setPhase("setup"); setBrags([]); setEnemyBrags([]); setBragEvent(null);
-    setWinner(null); setInitiativeWinner(null); setInitiativeToss(null); setDeploymentTurn(null); setBattleReward(null); setSeqActive(null); setHighlight(null); setActionStage(null); setTauntTargetRequest(null); setInspectedDeveloper(null); setEventTone("neutral");
+    setWinner(null); setInitiativeWinner(null); setInitiativeToss(null); setDeploymentTurn(null); setBattleReward(null); setSeqActive(null); setHighlight(null); setActionStage(null); setHudDamage(null); setTauntTargetRequest(null); setInspectedDeveloper(null); setEventTone("neutral");
     setAnnouncement({ key: Date.now(), title: "OFFICE SETUP", subtitle: "Build your workspace before the first sprint", tone: "lime" });
     setEvent("Set up your office before the first sprint begins.");
   };
 
-  return <main className={`battle-screen ${phase === "setup" ? "setup-active" : ""} ${phase === "initiative" ? "initiative-active" : ""} ${phase === "deploy" ? "opening-active" : ""}`}>
+  const playerHudDamage = hudDamage?.target === "player" ? hudDamage : bragEvent?.owner === "enemy" && bragEvent.stage === "drain" ? { key: bragEvent.key, target: "player" as Owner, damage: bragEvent.damage } : null;
+  const enemyHudDamage = hudDamage?.target === "enemy" ? hudDamage : bragEvent?.owner === "player" && bragEvent.stage === "drain" ? { key: bragEvent.key, target: "enemy" as Owner, damage: bragEvent.damage } : null;
+
+  return <main className={`battle-screen ${phase === "setup" ? "setup-active" : ""} ${phase === "initiative" ? "initiative-active" : ""} ${phase === "deploy" ? "opening-active" : ""} ${phase === "resolving" && actionStage?.kind === "taunt" && actionStage.targetIsLead ? "lead-taunt-active" : ""}`}>
     <div className="battle-hud">
       <div className="hud-stack player-hud-stack">
         <HudBragIndicator owner="player" count={brags.length} ready={phase === "brag"} onClick={tryUseBrag} />
-        <PlayerHud owner="player" name="YOU // LOCALHOST" sanity={playerSanity} max={30} targeted={highlight?.targetId === "player-lead" || (bragEvent?.owner === "enemy" && bragEvent.stage === "drain")} />
+        <PlayerHud owner="player" name="YOU // LOCALHOST" sanity={playerSanity} max={30} damageEvent={playerHudDamage} />
         {showHudProjects && <HudProjectCard owner="player" project={playerProject} attention={!!(projectNudge || bragNudge)} onClick={playerProject ? () => { setBragNudge(null); setProjectModalOpen(true); } : openProjectPicker} />}
         {showHudProjects && (projectNudge || bragNudge) && <img key={projectNudge ?? bragNudge} className="hud-project-pointer" src="/ui/project-cursor.png" alt="" aria-hidden="true" />}
       </div>
       <div className={`turn-pill ${phase === "setup" ? "setup" : phase === "initiative" ? "initiative" : phase === "deploy" ? "deployment" : ""}`}><span>{phase === "setup" ? "OFFICE" : phase === "initiative" ? "FIRST MOVE" : phase === "deploy" ? "DEPLOY" : bragEvent ? "BRAG" : "SPRINT"}</span><b>{phase === "setup" ? `${configuredAreas}/4` : phase === "initiative" ? initiativeToss?.stage === "result" ? initiativeToss.winner === "player" ? "YOU" : opponent.initials : "?" : phase === "deploy" ? String(deploymentTurn === "enemy" ? enemySlots.flatMap((slot) => slot.developers).length : placed.length).padStart(2, "0") : bragEvent ? `-${bragEvent.damage}` : String(turn).padStart(2, "0")}</b><small>{phase === "setup" ? "LAYOUT SETUP" : phase === "initiative" ? initiativeToss?.stage === "result" ? "GOES FIRST" : "CURSOR SPIN" : phase === "deploy" ? `${deploymentTurn === "enemy" ? "RIVAL" : "YOUR"} TEAM` : bragEvent ? "SANITY HIT" : phase === "resolving" ? `SEQUENCE ${seqActive ?? 1}/${SEQUENCE_COUNT}` : phase === "brag" ? "BRAG WINDOW" : "PLANNING"}</small></div>
       <div className="hud-stack enemy-hud-stack">
         <HudBragIndicator owner="enemy" count={enemyBrags.length} />
-        <PlayerHud owner="enemy" name={opponent.teamName} avatarText={opponent.initials} sanity={enemySanity} max={30} targeted={highlight?.targetId === "enemy-lead" || (bragEvent?.owner === "player" && bragEvent.stage === "drain")} />
+        <PlayerHud owner="enemy" name={opponent.teamName} avatarText={opponent.initials} avatarArt={opponent.art} avatarAlt={`${opponent.name} Lead card`} sanity={enemySanity} max={30} damageEvent={enemyHudDamage} />
         {showHudProjects && <HudProjectCard owner="enemy" project={enemyProject} />}
       </div>
     </div>
@@ -1218,8 +1233,6 @@ function LeadTauntStage({ stage, opponentName }: { stage: ActionStage; opponentN
       </article>
       <img className="taunt-bubble-asset" src="/ui/taunt-bubble.png" alt="" aria-hidden="true" />
     </div>
-    <div className="lead-taunt-impact" aria-hidden="true"><span><i /><i /><i /></span><b>-{stage.damage}</b></div>
-    <div className="lead-taunt-readout"><small>{targetsEnemy ? "RIVAL SANITY" : "YOUR SANITY"}</small><b><i>{stage.targetSanityBefore}</i><i>{stage.targetSanityAfter ?? stage.targetSanityBefore}</i></b><span>/ 30</span></div>
     <div className={`lead-taunt-result ${stage.phase === "result" ? "visible" : ""}`}><b>{stage.message}</b></div>
   </div>;
 }
@@ -1330,11 +1343,12 @@ function DeveloperDetails({ inspected, onClose }: { inspected: InspectedDevelope
   </section></div>;
 }
 
-function PlayerHud({ owner, name, sanity, max, avatarText, targeted = false }: { owner: Owner; name: string; sanity: number; max: number; avatarText?: string; targeted?: boolean }) {
+function PlayerHud({ owner, name, sanity, max, avatarText, avatarArt, avatarAlt = "", damageEvent }: { owner: Owner; name: string; sanity: number; max: number; avatarText?: string; avatarArt?: string; avatarAlt?: string; damageEvent?: HudDamageState | null }) {
   const rain = owner === "player" ? ["01", "</>", "npm", "101", "git", "{}", "dev", "011"] : ["ERR", "404", "NULL", "010", "BUG", "!", "500", "ptr"];
-  return <div className={`player-hud ${owner} ${targeted ? "targeted" : ""}`}>
+  return <div className={`player-hud ${owner} ${damageEvent ? "damage-hit" : ""}`}>
     <span className="matrix-rain" aria-hidden="true">{rain.map((glyphs, index) => <i key={`${glyphs}-${index}`} style={{ "--matrix-x": `${6 + index * 12}%`, "--matrix-delay": `${-index * .47}s`, "--matrix-speed": `${2.9 + index % 3 * .7}s` } as React.CSSProperties}>{glyphs}</i>)}</span>
-    {targeted && <span className="hud-target">!</span>}<div className="avatar">{avatarText ?? (owner === "player" ? "YO" : "NP")}<i /></div><div className="hud-copy"><span>{name}</span><div><Brain size={14} /><b>{sanity}</b><small> / {max} SANITY</small></div><Meter value={sanity} max={max} tone={owner === "enemy" ? "pink" : "cyan"} /></div>
+    <div className="avatar">{avatarArt ? <img src={avatarArt} alt={avatarAlt} /> : avatarText ?? (owner === "player" ? "YO" : "NP")}<i /></div><div className="hud-copy"><span>{name}</span><div><Brain size={14} /><b>{sanity}</b><small> / {max} SANITY</small></div><Meter value={sanity} max={max} tone={owner === "enemy" ? "pink" : "cyan"} /></div>
+    {damageEvent && <span className="hud-damage-pop" key={damageEvent.key} aria-hidden="true"><img src="/ui/damage-burst.png" alt="" /><b>-{damageEvent.damage}</b></span>}
   </div>;
 }
 
