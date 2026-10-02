@@ -658,6 +658,31 @@ body { overflow-x:hidden; }
 @keyframes chanceLand { from { transform:rotate(0deg); } to { transform:rotate(calc(var(--roll-angle) + 720deg)); } }
 .action-stage.work.success .chance-wheel { box-shadow:0 0 0 4px #a8e94445,0 0 38px #a8e9447a; }.action-stage.work.failure .chance-wheel { box-shadow:0 0 0 4px #ff4f8d45,0 0 38px #ff4f8d6e; }
 
+/* Direct taunts use a Brag-like full-screen launch instead of a fake target card. */
+.lead-taunt-stage { --lead-target-x:84%;position:fixed;z-index:96;inset:0;overflow:hidden;pointer-events:none;background:radial-gradient(circle at 50% 50%,#ff316f20 0,#07111ad9 38%,#03080eb8 72%,transparent 100%);animation:actionStageIn .28s ease-out; }
+.lead-taunt-stage.from-enemy { --lead-target-x:16%; }
+.lead-taunt-heading { position:absolute;z-index:4;left:50%;top:132px;transform:translateX(-50%);min-width:min(480px,78vw);padding:8px 15px;border:1px solid #75405a;border-radius:999px;background:#100913e8;box-shadow:0 9px 28px #000b;text-align:center; }
+.lead-taunt-heading small,.lead-taunt-heading b { display:block; }.lead-taunt-heading small { color:#ff82aa;font:800 7px DM Mono;letter-spacing:.16em; }.lead-taunt-heading b { margin-top:2px;color:#f7e9ee;font:900 13px Space Grotesk;letter-spacing:.04em; }
+.lead-taunt-card { position:absolute;z-index:8;left:50%;top:50%;width:210px;height:270px;transform:translate(-50%,-50%);filter:drop-shadow(0 24px 25px #000c); }
+.lead-taunt-card .stage-developer-card { width:100%;height:100%;animation:leadTauntCardIn .46s cubic-bezier(.18,1.3,.32,1) both; }
+.lead-taunt-card .taunt-bubble-asset { left:auto;right:-72px;top:-60px;width:150px; }
+.lead-taunt-stage.result .lead-taunt-card { animation:leadTauntLaunch 1.38s .08s cubic-bezier(.24,.02,.1,1) both; }
+.lead-taunt-stage.result .lead-taunt-card .stage-developer-card { animation:none; }
+.lead-taunt-stage.result .lead-taunt-card .taunt-bubble-asset { animation:tauntBubbleOut .16s ease-in both; }
+.lead-taunt-impact { position:absolute;z-index:10;left:var(--lead-target-x);top:58px;width:142px;height:102px;transform:translate(-50%,-50%);display:grid;place-items:center; }
+.lead-taunt-impact>span { position:absolute;inset:0;display:grid;align-content:center;gap:8px;opacity:0; }.lead-taunt-impact i { height:4px;border-radius:4px;background:linear-gradient(90deg,transparent,#ff6c9b 30%,#fff,transparent);box-shadow:0 0 13px #ff316f; }.lead-taunt-impact i:first-child { width:72%; }.lead-taunt-impact i:nth-child(2) { width:100%; }.lead-taunt-impact i:last-child { width:63%;justify-self:end; }
+.lead-taunt-impact>b { position:relative;opacity:0;min-width:60px;height:60px;display:grid;place-items:center;border:3px solid white;border-radius:50%;background:#ff316f;box-shadow:0 7px 0 #74062a,0 0 26px #ff316f;color:white;font:950 22px Space Grotesk; }
+.lead-taunt-stage.result .lead-taunt-impact>span { animation:leadTauntSpeedLines .5s .53s ease-out both; }.lead-taunt-stage.result .lead-taunt-impact>b { animation:leadTauntDamagePop .42s .79s cubic-bezier(.18,1.55,.32,1) both; }
+.lead-taunt-readout { position:absolute;z-index:11;left:var(--lead-target-x);top:98px;transform:translateX(-50%) translateY(-6px) scale(.88);display:flex;align-items:baseline;gap:4px;padding:5px 9px;border:1px solid #ff87ac;border-radius:6px;background:#130913ed;box-shadow:0 8px 22px #000c;color:#fff;opacity:0; }
+.lead-taunt-readout small { color:#ff8caf;font:800 6px DM Mono;letter-spacing:.08em; }.lead-taunt-readout>b { position:relative;width:22px;height:20px;font:950 18px Space Grotesk; }.lead-taunt-readout>b i { position:absolute;inset:0;font-style:normal; }.lead-taunt-readout>b i:last-child { opacity:0; }.lead-taunt-readout>span { color:#aa7286;font:700 7px DM Mono; }
+.lead-taunt-stage.result .lead-taunt-readout { animation:leadTauntReadoutIn .28s .78s ease both; }.lead-taunt-stage.result .lead-taunt-readout>b i:first-child { animation:sanityValueOut .18s .82s both; }.lead-taunt-stage.result .lead-taunt-readout>b i:last-child { animation:sanityValueIn .18s .82s both; }
+.lead-taunt-result { position:absolute;z-index:5;left:50%;top:calc(50% + 166px);transform:translateX(-50%) translateY(6px);min-width:min(580px,82vw);padding:9px 18px;border:1px solid #75405a;border-radius:8px;background:#100913e8;box-shadow:0 14px 32px #000b;text-align:center;opacity:0;transition:.3s; }.lead-taunt-result.visible { animation:tauntResultReveal .3s 1.2s ease both; }.lead-taunt-result b { color:#f6e9ee;font:800 11px Space Grotesk; }
+@keyframes leadTauntCardIn { from { opacity:0;transform:translateY(30px) rotate(-4deg) scale(.72); } }
+@keyframes leadTauntLaunch { 0%,12% { left:50%;top:50%;transform:translate(-50%,-50%) scale(1) rotate(0);opacity:1; } 58% { left:var(--lead-target-x);top:60px;transform:translate(-50%,-50%) scale(.4) rotate(3deg);opacity:1; } 72% { left:var(--lead-target-x);top:60px;transform:translate(-50%,-50%) scale(.33) rotate(-2deg);opacity:1;filter:brightness(1.45) drop-shadow(0 0 32px #ff316f); } 100% { left:var(--lead-target-x);top:60px;transform:translate(-50%,-50%) scale(.24) rotate(0);opacity:0; } }
+@keyframes leadTauntSpeedLines { from { opacity:0;transform:scale(.25); } 45% { opacity:1; } to { opacity:0;transform:scale(1.3); } }
+@keyframes leadTauntDamagePop { from { opacity:0;transform:scale(.25) rotate(20deg); } to { opacity:1;transform:scale(1) rotate(-5deg); } }
+@keyframes leadTauntReadoutIn { to { opacity:1;transform:translateX(-50%) translateY(0) scale(1); } }
+
 .action-stage.taunt { --taunt-lunge:175px; }
 .taunt-bubble-asset { position:absolute;z-index:22;left:-55px;top:-68px;width:142px;height:auto;pointer-events:none;filter:drop-shadow(0 10px 11px #0009);animation:tauntBubbleIn .5s cubic-bezier(.18,1.45,.35,1) both; }
 @keyframes tauntBubbleIn { from { opacity:0;transform:translate(18px,14px) scale(.25) rotate(-12deg); } to { opacity:1;transform:none; } }
@@ -713,11 +738,13 @@ body { overflow-x:hidden; }
   .action-stage-result { margin-top:9px; }.stage-project-progress { width:92vw;grid-template-columns:105px 1fr 42px; }
   .taunt-target-prompt { width:88%;top:9px; }
   .action-matrix { min-width:760px; }
+  .lead-taunt-heading { top:105px; }.lead-taunt-card { width:150px;height:190px; }.lead-taunt-card .stage-card-art { height:132px; }.lead-taunt-card .taunt-bubble-asset { right:-52px;top:-42px;width:105px; }.lead-taunt-result { top:calc(50% + 122px); }.lead-taunt-impact { top:48px;transform:translate(-50%,-50%) scale(.78); }.lead-taunt-readout { top:78px; }
 }
 @media (prefers-reduced-motion:reduce) {
   .board-slot.taunt-target-ready,.board-card,.board-card.taunt-selectable,.stage-developer-card,.stage-work-card,.stage-empty-ticket,.chance-needle,.taunt-bubble-asset,.initiative-overlay,.initiative-callout,.initiative-spinner,.initiative-cursor,.action-stage.taunt.result .actor-card,.action-stage.taunt.result .target-card,.stage-taunt-impact>span,.stage-taunt-impact>b,.stage-sanity-readout i,.stage-sanity-meter i,.stage-project-progress>div i,.turn-draw-event,.turn-draw-heading,.turn-draw-card,.hand-drag-card.draw-arrival { animation:none; }
   .turn-draw-heading { opacity:1;transform:translate(-50%,0); }.turn-draw-card { opacity:1;transform:translate(var(--draw-x),0) rotate(var(--draw-angle)); }
   .action-stage.taunt.result .taunt-bubble-asset { display:none; }.action-stage.taunt.result .stage-sanity-readout i:first-child { opacity:0; }.action-stage.taunt.result .stage-sanity-readout i:last-child { opacity:1; }.action-stage.taunt.result .stage-sanity-meter i { width:var(--sanity-after); }
+  .lead-taunt-stage,.lead-taunt-card,.lead-taunt-card .stage-developer-card,.lead-taunt-impact>span,.lead-taunt-impact>b,.lead-taunt-readout,.lead-taunt-readout>b i,.lead-taunt-result { animation:none!important;transition:none!important; }.lead-taunt-stage.result .lead-taunt-card { left:var(--lead-target-x);top:60px;transform:translate(-50%,-50%) scale(.3);opacity:0; }.lead-taunt-stage.result .lead-taunt-readout,.lead-taunt-stage.result .lead-taunt-impact>b,.lead-taunt-stage.result .lead-taunt-result { opacity:1; }.lead-taunt-stage.result .lead-taunt-readout>b i:first-child { opacity:0; }.lead-taunt-stage.result .lead-taunt-readout>b i:last-child { opacity:1; }
 }
 
 /* Give the top-down first-move ceremony the whole stage while preserving the HUD. */

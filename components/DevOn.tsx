@@ -935,12 +935,15 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
           message = `${targetName} took ${damage} sanity and quit!`;
         }
       }
-      commitBattleState();
       setActionStage({ ...baseStage, phase: "result", message, targetSanityAfter: after });
       setEvent(message); setEventTone(owner === "player" ? "good" : "bad");
+      // Direct lead taunts travel from center to the HUD; land the actual
+      // sanity change with that visual impact instead of before the launch.
+      if (!target) await wait(780);
+      commitBattleState();
       playBattleSound("impact");
       setTimeout(() => playBattleSound("sanityDrop"), 90);
-      await wait(2200);
+      await wait(target ? 2200 : 1420);
       await clearActionStage();
     };
 
@@ -1102,6 +1105,7 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
     </div>
 
     {bragEvent && <BragEventOverlay event={bragEvent} opponentName={opponent.name} />}
+    {phase === "resolving" && actionStage?.kind === "taunt" && actionStage.targetIsLead && <LeadTauntStage stage={actionStage} opponentName={opponent.teamName} />}
 
     <div className="setup-console-spacer" aria-hidden="true" />
 
@@ -1130,7 +1134,7 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
       {phase === "setup" && !announcement && <div className="setup-card-tray" aria-label="Reusable office space cards"><OfficeCard area="open" selected={selectedArea === "open"} dragging={draggedArea === "open"} onClick={() => selectAreaCard("open")} onPointerDown={(event) => startAreaPointer(event, "open")} onPointerMove={moveAreaPointer} onPointerUp={finishAreaPointer} onPointerCancel={cancelAreaPointer} /><OfficeCard area="cubicle" selected={selectedArea === "cubicle"} dragging={draggedArea === "cubicle"} onClick={() => selectAreaCard("cubicle")} onPointerDown={(event) => startAreaPointer(event, "cubicle")} onPointerMove={moveAreaPointer} onPointerUp={finishAreaPointer} onPointerCancel={cancelAreaPointer} /></div>}
       {phase === "setup" && <div className="setup-deck-preview"><DrawPile remaining={deck.length} total={deck.length} label="YOUR DECK" onOpen={() => setDeckOpen(true)} /></div>}
       {phase === "setup" && <div className="setup-ready-panel"><div><span>OFFICE LAYOUT</span><b>{configuredAreas}<small>/4</small></b><p>{setupReady ? "Every bay is configured." : selectedArea ? `Click a bay to place ${selectedArea === "open" ? "Open Space" : "Cubicles"}.` : "Drag a reusable space card into each bay."}</p></div><button onClick={finishSetup} disabled={!setupReady}><Check size={18} /><span><b>READY</b><small>{setupReady ? "Begin Sprint 01" : `${4 - configuredAreas} bays remaining`}</small></span></button></div>}
-      {phase === "resolving" && actionStage && <ActionStageView stage={actionStage} />}
+      {phase === "resolving" && actionStage && !(actionStage.kind === "taunt" && actionStage.targetIsLead) && <ActionStageView stage={actionStage} />}
       {turnDrawEvent && <TurnDrawEventView draw={turnDrawEvent} />}
     </div>
 
@@ -1198,6 +1202,25 @@ function BragEventOverlay({ event, opponentName }: { event: BragEventState; oppo
     </div>
     <div className="brag-event-copy"><small>{playerBragged ? "YOUR BRAG" : "RIVAL BRAG"}</small><b>{playerBragged ? "SHIP IT AND SAY IT" : `${opponentName.toUpperCase()} CALLED YOU OUT`}</b><span>{event.damage} SANITY DAMAGE</span></div>
     <div className="brag-target-readout"><small>{playerBragged ? "RIVAL SANITY" : "YOUR SANITY"}</small><b>{event.current}</b><span>/ 30</span></div>
+  </div>;
+}
+
+function LeadTauntStage({ stage, opponentName }: { stage: ActionStage; opponentName: string }) {
+  const actor = getDeveloper(stage.actor.devId);
+  const targetsEnemy = stage.owner === "player";
+  const targetName = targetsEnemy ? opponentName : "YOU // LOCALHOST";
+  return <div key={stage.key} className={`lead-taunt-stage from-${stage.owner} ${stage.phase}`} role="status" aria-live="assertive">
+    <div className="lead-taunt-heading"><small>SEQUENCE {String(stage.sequence).padStart(2, "0")} · DIRECT TAUNT</small><b>{stage.phase === "intro" ? `${actor.name.toUpperCase()} STEPS UP` : `${targetName.toUpperCase()} TAKES THE HIT`}</b></div>
+    <div className="lead-taunt-card">
+      <article className="stage-developer-card" style={{ "--accent": actor.accent } as React.CSSProperties}>
+        <div className="stage-card-art"><img src={actor.art} alt={actor.name} /></div>
+        <div className="stage-card-copy"><small>{actor.role}</small><b>{actor.name}</b><span><Brain size={13} /> {stage.actor.sanity} sanity</span></div>
+      </article>
+      <img className="taunt-bubble-asset" src="/ui/taunt-bubble.png" alt="" aria-hidden="true" />
+    </div>
+    <div className="lead-taunt-impact" aria-hidden="true"><span><i /><i /><i /></span><b>-{stage.damage}</b></div>
+    <div className="lead-taunt-readout"><small>{targetsEnemy ? "RIVAL SANITY" : "YOUR SANITY"}</small><b><i>{stage.targetSanityBefore}</i><i>{stage.targetSanityAfter ?? stage.targetSanityBefore}</i></b><span>/ 30</span></div>
+    <div className={`lead-taunt-result ${stage.phase === "result" ? "visible" : ""}`}><b>{stage.message}</b></div>
   </div>;
 }
 
