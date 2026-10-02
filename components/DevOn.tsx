@@ -1254,22 +1254,20 @@ function HudProjectCard({ owner, project, attention = false, onClick }: { owner:
 function RewardRoulette({ candidates, winner, addedToDeck }: { candidates: Developer[]; winner: Developer; addedToDeck: boolean }) {
   const [revealed, setRevealed] = useState(false);
   const winnerIndex = Math.max(0, candidates.findIndex((candidate) => candidate.id === winner.id));
-  const segment = 360 / Math.max(candidates.length, 1);
-  const endAngle = 1440 - winnerIndex * segment;
+  const landingIndex = 11;
+  const reelCards = Array.from({ length: 27 }, (_, index) => candidates[(index + winnerIndex + candidates.length - (landingIndex % candidates.length)) % candidates.length]);
+  const reelEnd = -(landingIndex * 96 + 42);
 
   useEffect(() => {
-    const timer = setTimeout(() => setRevealed(true), 2750);
+    const timer = setTimeout(() => setRevealed(true), 2850);
     return () => clearTimeout(timer);
   }, [winner.id]);
 
-  return <div className={`reward-roulette ${revealed ? "revealed" : "spinning"}`} style={{ "--reward-end-angle": `${endAngle}deg`, "--reward-accent": winner.accent } as React.CSSProperties}>
-    <div className="reward-roulette-heading"><small>{revealed ? "CAMPAIGN DROP LOCKED" : "ROLLING CAMPAIGN CACHE"}</small><b>{revealed ? `${winner.name.toUpperCase()} UNLOCKED` : "WHO JOINS YOUR TEAM?"}</b></div>
-    <div className="reward-wheel" aria-hidden="true">
-      <span className="reward-wheel-pointer"><ChevronDown size={18} /></span>
-      <div className="reward-wheel-track">{candidates.map((candidate, index) => {
-        const angle = index * segment;
-        return <span className={`reward-wheel-slot ${candidate.id === winner.id ? "winner" : ""}`} key={candidate.id} style={{ "--reward-angle": `${angle}deg` } as React.CSSProperties}><span style={{ "--reward-counter-start": `${-angle}deg`, "--reward-counter-end": `${-(angle + endAngle)}deg`, "--accent": candidate.accent } as React.CSSProperties}><img src={candidate.art} alt="" /><b>{candidate.name}</b></span></span>;
-      })}</div>
+  return <div className={`reward-roulette ${revealed ? "revealed" : "spinning"}`} style={{ "--reward-reel-end": `${reelEnd}px`, "--reward-accent": winner.accent } as React.CSSProperties}>
+    <div className="reward-roulette-heading"><small>{revealed ? "CAMPAIGN DROP LOCKED" : "OPENING CAMPAIGN CACHE"}</small><b>{revealed ? `${winner.name.toUpperCase()} UNLOCKED` : "WHO JOINS YOUR TEAM?"}</b></div>
+    <div className="reward-reel" aria-hidden="true">
+      <span className="reward-reel-selector"><ChevronDown size={18} /><i /></span>
+      <div className="reward-reel-track">{reelCards.map((candidate, index) => <span className={`reward-reel-card ${index === landingIndex ? "winner" : ""}`} key={`${candidate.id}-${index}`} style={{ "--accent": candidate.accent } as React.CSSProperties}><img src={candidate.art} alt="" /><span><b>{candidate.name}</b><small>{candidate.role}</small></span></span>)}</div>
     </div>
     <div className="reward-result" role="status" aria-live="polite" style={{ "--accent": winner.accent } as React.CSSProperties}><img src={winner.art} alt={winner.name} /><span><small>NEW DEVELOPER UNLOCKED</small><b>{winner.name}</b><em>{winner.role} · {winner.traitLabel}</em><strong>Added to your collection{addedToDeck ? " and deck" : ""}</strong></span></div>
   </div>;
@@ -1314,15 +1312,16 @@ function DeckViewer({ deck, remaining, onClose, onInspect }: { deck: string[]; r
 function DeveloperDetails({ inspected, onClose }: { inspected: InspectedDeveloper; onClose: () => void }) {
   const dev = getDeveloper(inspected.devId);
   const currentSanity = inspected.placed?.sanity ?? dev.sanity;
+  const sanityPercent = clamp((currentSanity / dev.sanity) * 100, 0, 100);
   const workTypes = `All tasks · ${dev.role} specialty`;
   return <div className="modal-backdrop card-detail-backdrop" onClick={onClose}><section className="developer-detail" onClick={(event) => event.stopPropagation()} style={{ "--accent": dev.accent } as React.CSSProperties}>
     <button className="detail-close" onClick={onClose} aria-label="Close developer details"><X size={18} /></button>
     <div className="detail-art"><img src={dev.art} alt={`${dev.name} portrait`} /><span>{dev.role}</span></div>
     <div className="detail-copy">
       <span className="eyebrow-small">DEVELOPER PROFILE</span><h2>{dev.name}</h2><blockquote>“{dev.quote}”</blockquote>
+      <div className="detail-sanity" aria-label={`${currentSanity} of ${dev.sanity} sanity`}><span><Shield size={16} /><small>SANITY</small></span><div><i style={{ width: `${sanityPercent}%` }} /></div><b>{currentSanity}<small>/{dev.sanity}</small></b></div>
       <div className="detail-stats">
         <div><Brain size={18} /><span><b>{dev.completion}%</b><small>COMPLETION POWER</small></span></div>
-        <div><Shield size={18} /><span><b>{currentSanity}<small>/{dev.sanity}</small></b><small>{inspected.placed ? "CURRENT SANITY" : "SANITY"}</small></span></div>
         <div><Code2 size={18} /><span><b>{workTypes}</b><small>WORK COMPATIBILITY</small></span></div>
       </div>
       <div className="detail-trait"><Sparkles size={20} /><span><small>SPECIAL TRAIT</small><b>{dev.traitLabel}</b><p>{dev.trait}</p></span></div>
