@@ -16,6 +16,7 @@ type PlannedAction = "skip" | `taunt:${string}` | `work:${string}`;
 type ActionHighlight = { actorId?: string; targetId?: string; kind: "skip" | "work" | "taunt" };
 type BattlePhase = "setup" | "initiative" | "deploy" | "plan" | "resolving" | "brag" | "gameover";
 type InitiativeTossState = { winner: Owner; stage: "spinning" | "result" };
+type BragEventState = { key: number; owner: Owner; damage: number; before: number; after: number; current: number; stage: "burst" | "travel" | "drain" };
 type InspectedDeveloper = { devId: string; placed?: PlacedDev; owner?: Owner; handIndex?: number };
 type StageAnnouncement = { key: number; title: string; subtitle: string; tone: "cyan" | "lime" | "pink" };
 type TauntTargetRequest = { key: string; placed: PlacedDev; sequence: number };
@@ -302,6 +303,8 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
   const [event, setEvent] = useState("Set up your office before the first sprint begins.");
   const [eventTone, setEventTone] = useState<"neutral" | "good" | "bad">("neutral");
   const [brags, setBrags] = useState<number[]>([]);
+  const [enemyBrags, setEnemyBrags] = useState<number[]>([]);
+  const [bragEvent, setBragEvent] = useState<BragEventState | null>(null);
   const [winner, setWinner] = useState<Owner | null>(null);
   const [initiativeWinner, setInitiativeWinner] = useState<Owner | null>(null);
   const [initiativeToss, setInitiativeToss] = useState<InitiativeTossState | null>(null);
@@ -711,6 +714,39 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
     onUnlockReward(developerId);
   };
 
+  const playBragImpact = async (owner: Owner, damage: number, before: number) => {
+    const run = openingRun.current;
+    const after = Math.max(0, before - damage);
+    const source = owner === "player" ? "You" : opponent.name;
+    const target = owner === "player" ? opponent.name : "you";
+    const setTargetSanity = owner === "player" ? setEnemySanity : setPlayerSanity;
+    const key = Date.now();
+    setBragEvent({ key, owner, damage, before, after, current: before, stage: "burst" });
+    setEvent(`${source} launched a Brag at ${target} for ${damage} sanity.`);
+    setEventTone(owner === "player" ? "good" : "bad");
+    playBattleSound("brag");
+    await wait(680);
+    if (openingRun.current !== run) return null;
+    setBragEvent((current) => current?.key === key ? { ...current, stage: "travel" } : current);
+    await wait(900);
+    if (openingRun.current !== run) return null;
+    setBragEvent((current) => current?.key === key ? { ...current, stage: "drain" } : current);
+    playBattleSound("impact");
+    setTimeout(() => playBattleSound("sanityDrop"), 90);
+    const points = before - after;
+    const stepDelay = Math.max(75, Math.floor(950 / Math.max(points, 1)));
+    for (let point = 1; point <= points; point++) {
+      if (openingRun.current !== run) return null;
+      setTargetSanity(before - point);
+      setBragEvent((current) => current?.key === key ? { ...current, current: before - point } : current);
+      await wait(stepDelay);
+    }
+    await wait(420);
+    if (openingRun.current !== run) return null;
+    setBragEvent(null);
+    return after;
+  };
+
   const advanceTurn = (ps: ProjectState[], aiProjectId: string | undefined) => {
     let next = ps;
     if (!aiProjectId) {
@@ -736,6 +772,29 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
     showAnnouncement("YOUR TURN", `Sprint ${String(turn + 1).padStart(2, "0")} · Plan your next sequence`, "cyan");
   };
 
+  const finishSprint = async (ps: ProjectState[], aiProjectId: string | undefined, rivalBrags = enemyBrags, currentPlayerSanity = playerSanity) => {
+    const available = [...rivalBrags];
+    setEnemyBrags(available);
+    const damage = available[0];
+    const shouldBrag = !!damage && (damage >= currentPlayerSanity || available.length >= 2 || Math.random() < (currentPlayerSanity <= 18 ? .78 : .48));
+    if (!damage || !shouldBrag) {
+      advanceTurn(ps, aiProjectId);
+      return;
+    }
+    setPhase("resolving");
+    setSeqActive(null);
+    setEnemyBrags(available.slice(1));
+    const nextPlayerSanity = await playBragImpact("enemy", damage, currentPlayerSanity);
+    if (nextPlayerSanity === null) return;
+    if (nextPlayerSanity <= 0) {
+      setWinner("enemy");
+      setPhase("gameover");
+      setTimeout(() => playBattleSound("defeat"), 420);
+      return;
+    }
+    advanceTurn(ps, aiProjectId);
+  };
+
   const resolveTurn = async () => {
     if (!playerProject) { setEvent("Claim a project before running the sprint."); setEventTone("bad"); setPlannerOpen(false); return; }
     if (playerSlots.some((slot) => !slot.type)) { setEvent("Install all four work-area cards before running the sprint."); setEventTone("bad"); setPlannerOpen(false); return; }
@@ -746,6 +805,7 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
     let ps = projects.map((p) => ({ ...p, tasksState: Object.fromEntries(Object.entries(p.tasksState).map(([k, v]) => [k, { ...v }])) }));
     let pSan = playerSanity, eSan = enemySanity;
     let queuedBrags = [...brags];
+    let queuedEnemyBrags = [...enemyBrags];
     let quitDevelopers = [...unemployment];
     let pProjectId: string | undefined = playerProject.id;
     let aiProjectId: string | undefined = enemyProject?.id;
@@ -756,7 +816,7 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
       setEnemySlots(eSlots.map((s) => ({ ...s, developers: s.developers.map((d) => ({ ...d })) })));
       setUnemployment([...quitDevelopers]);
       setProjects(ps.map((p) => ({ ...p, tasksState: Object.fromEntries(Object.entries(p.tasksState).map(([id, state]) => [id, { ...state }])) })));
-      setPlayerSanity(pSan); setEnemySanity(eSan); setBrags([...queuedBrags]);
+      setPlayerSanity(pSan); setEnemySanity(eSan); setBrags([...queuedBrags]); setEnemyBrags([...queuedEnemyBrags]);
     };
 
     const clearActionStage = async () => {
@@ -814,8 +874,8 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
             message = `${project.name} reached MVP — BRAG unlocked!`;
           } else {
             aiProjectId = undefined;
-            pSan = Math.max(0, pSan - project.brag);
-            message = `Rival shipped ${project.name} and bragged for ${project.brag} sanity!`;
+            queuedEnemyBrags.push(project.brag);
+            message = `Rival shipped ${project.name} — BRAG banked!`;
           }
         }
       } else {
@@ -957,16 +1017,20 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
     }
     setSeqActive(null);
     if (queuedBrags.length) { setPhase("brag"); setEvent("Project complete. Brag now—or bank it and end the sprint."); setEventTone("good"); }
-    else advanceTurn(ps, aiProjectId);
+    else await finishSprint(ps, aiProjectId, queuedEnemyBrags, pSan);
   };
 
-  const useBrag = () => {
-    const hit = brags[0]; const remaining = brags.slice(1); const nextEnemy = Math.max(0, enemySanity - hit);
-    setEnemySanity(nextEnemy); setBrags(remaining); setEvent(`You shipped it and bragged for ${hit} sanity damage!`); setEventTone("good");
-    playBattleSound("brag");
-    if (nextEnemy <= 0) { grantVictoryReward(); setWinner("player"); setPhase("gameover"); setTimeout(() => playBattleSound("victory"), 650); return; }
+  const useBrag = async () => {
+    const hit = brags[0];
+    if (!hit || bragEvent) return;
+    const remaining = brags.slice(1);
+    setPhase("resolving");
+    setBrags(remaining);
+    const nextEnemy = await playBragImpact("player", hit, enemySanity);
+    if (nextEnemy === null) return;
+    if (nextEnemy <= 0) { grantVictoryReward(); setWinner("player"); setPhase("gameover"); setTimeout(() => playBattleSound("victory"), 420); return; }
     // One brag per turn; extra brags remain banked.
-    setTimeout(() => advanceTurn(projects, projects.find((p) => p.claimedBy === "enemy" && !p.completed)?.id), 500);
+    await finishSprint(projects, projects.find((p) => p.claimedBy === "enemy" && !p.completed)?.id, enemyBrags, playerSanity);
   };
 
   const tryUseBrag = () => {
@@ -987,7 +1051,11 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
     useBrag();
   };
 
-  const skipBrag = () => { playBattleSound("skip"); advanceTurn(projects, projects.find((p) => p.claimedBy === "enemy" && !p.completed)?.id); };
+  const skipBrag = async () => {
+    playBattleSound("skip");
+    setPhase("resolving");
+    await finishSprint(projects, projects.find((p) => p.claimedBy === "enemy" && !p.completed)?.id, enemyBrags, playerSanity);
+  };
 
   const toggleSound = () => {
     const enabled = !soundEnabled.current;
@@ -1011,7 +1079,7 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
     const nextProjects = freshBattleProjects(opponent);
     setProjects(nextProjects);
     setPlayerSanity(30); setEnemySanity(30); setTurn(1); setCameraX(0); setCameraTilt(52); setCameraZoom(1);
-    setPlannerOpen(false); setSprintConfirmOpen(false); setProjectModalOpen(false); setProjectNudge(null); setBragNudge(null); setPlan({}); setPhase("setup"); setBrags([]);
+    setPlannerOpen(false); setSprintConfirmOpen(false); setProjectModalOpen(false); setProjectNudge(null); setBragNudge(null); setPlan({}); setPhase("setup"); setBrags([]); setEnemyBrags([]); setBragEvent(null);
     setWinner(null); setInitiativeWinner(null); setInitiativeToss(null); setDeploymentTurn(null); setBattleReward(null); setSeqActive(null); setHighlight(null); setActionStage(null); setTauntTargetRequest(null); setInspectedDeveloper(null); setEventTone("neutral");
     setAnnouncement({ key: Date.now(), title: "OFFICE SETUP", subtitle: "Build your workspace before the first sprint", tone: "lime" });
     setEvent("Set up your office before the first sprint begins.");
@@ -1020,21 +1088,20 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
   return <main className={`battle-screen ${phase === "setup" ? "setup-active" : ""} ${phase === "initiative" ? "initiative-active" : ""} ${phase === "deploy" ? "opening-active" : ""}`}>
     <div className="battle-hud">
       <div className="hud-stack player-hud-stack">
-        <PlayerHud owner="player" name="YOU // LOCALHOST" sanity={playerSanity} max={30} targeted={highlight?.targetId === "player-lead"} />
+        <HudBragIndicator owner="player" count={brags.length} ready={phase === "brag"} onClick={tryUseBrag} />
+        <PlayerHud owner="player" name="YOU // LOCALHOST" sanity={playerSanity} max={30} targeted={highlight?.targetId === "player-lead" || (bragEvent?.owner === "enemy" && bragEvent.stage === "drain")} />
         {showHudProjects && <HudProjectCard owner="player" project={playerProject} attention={!!(projectNudge || bragNudge)} onClick={playerProject ? () => { setBragNudge(null); setProjectModalOpen(true); } : openProjectPicker} />}
         {showHudProjects && (projectNudge || bragNudge) && <img key={projectNudge ?? bragNudge} className="hud-project-pointer" src="/ui/project-cursor.png" alt="" aria-hidden="true" />}
       </div>
-      <div className={`turn-pill ${phase === "setup" ? "setup" : phase === "initiative" ? "initiative" : phase === "deploy" ? "deployment" : ""}`}><span>{phase === "setup" ? "OFFICE" : phase === "initiative" ? "FIRST MOVE" : phase === "deploy" ? "DEPLOY" : "SPRINT"}</span><b>{phase === "setup" ? `${configuredAreas}/4` : phase === "initiative" ? initiativeToss?.stage === "result" ? initiativeToss.winner === "player" ? "YOU" : opponent.initials : "?" : phase === "deploy" ? String(deploymentTurn === "enemy" ? enemySlots.flatMap((slot) => slot.developers).length : placed.length).padStart(2, "0") : String(turn).padStart(2, "0")}</b><small>{phase === "setup" ? "LAYOUT SETUP" : phase === "initiative" ? initiativeToss?.stage === "result" ? "GOES FIRST" : "CURSOR SPIN" : phase === "deploy" ? `${deploymentTurn === "enemy" ? "RIVAL" : "YOUR"} TEAM` : phase === "resolving" ? `SEQUENCE ${seqActive ?? 1}/${SEQUENCE_COUNT}` : phase === "brag" ? "BRAG WINDOW" : "PLANNING"}</small></div>
+      <div className={`turn-pill ${phase === "setup" ? "setup" : phase === "initiative" ? "initiative" : phase === "deploy" ? "deployment" : ""}`}><span>{phase === "setup" ? "OFFICE" : phase === "initiative" ? "FIRST MOVE" : phase === "deploy" ? "DEPLOY" : bragEvent ? "BRAG" : "SPRINT"}</span><b>{phase === "setup" ? `${configuredAreas}/4` : phase === "initiative" ? initiativeToss?.stage === "result" ? initiativeToss.winner === "player" ? "YOU" : opponent.initials : "?" : phase === "deploy" ? String(deploymentTurn === "enemy" ? enemySlots.flatMap((slot) => slot.developers).length : placed.length).padStart(2, "0") : bragEvent ? `-${bragEvent.damage}` : String(turn).padStart(2, "0")}</b><small>{phase === "setup" ? "LAYOUT SETUP" : phase === "initiative" ? initiativeToss?.stage === "result" ? "GOES FIRST" : "CURSOR SPIN" : phase === "deploy" ? `${deploymentTurn === "enemy" ? "RIVAL" : "YOUR"} TEAM` : bragEvent ? "SANITY HIT" : phase === "resolving" ? `SEQUENCE ${seqActive ?? 1}/${SEQUENCE_COUNT}` : phase === "brag" ? "BRAG WINDOW" : "PLANNING"}</small></div>
       <div className="hud-stack enemy-hud-stack">
-        <button type="button" className={`hud-brag-button ${brags.length ? "armed" : "locked"} ${phase === "brag" ? "ready" : ""}`} onClick={tryUseBrag} aria-label={brags.length ? `Use Brag. ${brags.length} available.` : "Brag locked. Complete a project first."}>
-          <img src="/ui/brag-burst.png" alt="" />
-          {!brags.length && <span><LockKeyhole size={10} /> LOCKED</span>}
-          {!!brags.length && <em>{brags.length}</em>}
-        </button>
-        <PlayerHud owner="enemy" name={opponent.teamName} avatarText={opponent.initials} sanity={enemySanity} max={30} targeted={highlight?.targetId === "enemy-lead"} />
+        <HudBragIndicator owner="enemy" count={enemyBrags.length} />
+        <PlayerHud owner="enemy" name={opponent.teamName} avatarText={opponent.initials} sanity={enemySanity} max={30} targeted={highlight?.targetId === "enemy-lead" || (bragEvent?.owner === "player" && bragEvent.stage === "drain")} />
         {showHudProjects && <HudProjectCard owner="enemy" project={enemyProject} />}
       </div>
     </div>
+
+    {bragEvent && <BragEventOverlay event={bragEvent} opponentName={opponent.name} />}
 
     <div className="setup-console-spacer" aria-hidden="true" />
 
@@ -1079,7 +1146,7 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
           {phase === "deploy" && deploymentTurn === "player" && <button className="deployment-ready-button" onClick={finishPlayerDeployment} disabled={!playerDeploymentReady}><Check size={19} /><span><b>LOCK TEAM</b><small>{playerDeploymentReady ? placed.length ? `${placed.length} deployed · continue` : "No valid desks · continue" : `${hand.length} cards still need desks`}</small></span></button>}
           {phase === "deploy" && deploymentTurn === "enemy" && <div className="resolving-button rival-deploying"><span className="spinner" /><div><b>RIVAL DEPLOYING</b><small>Cards are dealt one at a time</small></div></div>}
           {phase === "plan" && <div className="sprint-controls"><button className="sprint-button" onClick={openSprintConfirmation} aria-label="Run sprint and end turn"><img src="/ui/sprint-button.png" alt="" /><span>SPRINT!</span></button><button className="plan-queue-button" onClick={openSprintPlanner}><Ticket size={15} /><span>PLAN</span><em>{plannedActions}</em></button></div>}
-          {phase === "resolving" && <div className="resolving-button"><span className="spinner" /><div><b>SPRINT IN PROGRESS</b><small>Actions resolve in sequence</small></div></div>}
+          {phase === "resolving" && <div className="resolving-button"><span className="spinner" /><div><b>{bragEvent ? "BRAG IN FLIGHT" : "SPRINT IN PROGRESS"}</b><small>{bragEvent ? "Sanity impact resolving" : "Actions resolve in sequence"}</small></div></div>}
           {phase === "brag" && <div className="brag-window-actions"><span>BRAG READY ABOVE</span><button className="skip-button" onClick={skipBrag}>Bank for later</button></div>}
         </div>
     </div></div>}
@@ -1119,6 +1186,27 @@ function InitiativeToss({ state, opponent }: { state: InitiativeTossState; oppon
       <span className={`initiative-target player ${state.stage === "result" && playerWon ? "chosen" : ""}`}><b>YO</b><small>YOU</small></span>
     </div>
   </div>;
+}
+
+function BragEventOverlay({ event, opponentName }: { event: BragEventState; opponentName: string }) {
+  const playerBragged = event.owner === "player";
+  return <div className={`brag-event-overlay from-${event.owner} ${event.stage}`} role="status" aria-live="assertive">
+    <div className="brag-event-shockwave" />
+    <div className="brag-event-flight">
+      <img src="/ui/brag-burst.png" alt="" />
+      <span className="brag-event-damage">-{event.damage}</span>
+    </div>
+    <div className="brag-event-copy"><small>{playerBragged ? "YOUR BRAG" : "RIVAL BRAG"}</small><b>{playerBragged ? "SHIP IT AND SAY IT" : `${opponentName.toUpperCase()} CALLED YOU OUT`}</b><span>{event.damage} SANITY DAMAGE</span></div>
+    <div className="brag-target-readout"><small>{playerBragged ? "RIVAL SANITY" : "YOUR SANITY"}</small><b>{event.current}</b><span>/ 30</span></div>
+  </div>;
+}
+
+function HudBragIndicator({ owner, count, ready = false, onClick }: { owner: Owner; count: number; ready?: boolean; onClick?: () => void }) {
+  const className = `hud-brag-button ${owner} ${count ? "armed" : "locked"} ${ready ? "ready" : ""}`;
+  const label = owner === "player" ? count ? `Use Brag. ${count} available.` : "Brag locked. Complete a project first." : count ? `Rival has ${count} Brag${count === 1 ? "" : "s"} banked.` : "Rival has no Brag banked.";
+  const content = <><img src="/ui/brag-burst.png" alt="" />{!count ? <span><LockKeyhole size={10} /> {owner === "player" ? "LOCKED" : "CPU EMPTY"}</span> : <span>{owner === "player" ? "YOUR BRAG" : "CPU BANKED"}</span>}{!!count && <em>{count}</em>}</>;
+  if (owner === "enemy") return <div className={className} role="status" aria-label={label}>{content}</div>;
+  return <button type="button" className={className} onClick={onClick} aria-label={label}>{content}</button>;
 }
 
 function HudProjectCard({ owner, project, attention = false, onClick }: { owner: Owner; project?: ProjectState; attention?: boolean; onClick?: () => void }) {

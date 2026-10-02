@@ -40,7 +40,7 @@ If a task or project completes early, every later Work action aimed at it is aut
 
 ## Playing against the MVP AI
 
-The computer usually prefers role-aligned work but occasionally taunts, skips, or gambles on a cross-role task. It understands failure marks and completed dependencies, but it does not solve the entire four-step sprint optimally. It applies pressure without behaving like an oracle. Future difficulty levels can change its look-ahead depth, targeting quality, and willingness to hedge—not its hidden luck.
+The computer usually prefers role-aligned work but occasionally taunts, skips, or gambles on a cross-role task. It understands failure marks and completed dependencies, but it does not solve the entire four-step sprint optimally. Rival project completions now bank visible Brags instead of dealing hidden instant damage. At the end of a sprint, the computer always spends a lethal Brag, spends when its bank is getting crowded, and otherwise becomes more aggressive as player sanity falls; a held Brag stays visible beside the rival HUD. It applies pressure without behaving like an oracle. Future difficulty levels can change its look-ahead depth, targeting quality, and willingness to hedge—not its hidden luck.
 
 ## Strategy questions to watch in playtests
 
