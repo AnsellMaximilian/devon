@@ -22,9 +22,9 @@ Cubicles are insurance. They are ideal for fragile, high-output developers such 
 
 Stewart is a self-contained anchor. His high completion and sanity are valuable in a cubicle or alone in open space, but his Googoo Gaga Code penalty makes a crowded collaborative slot materially worse.
 
-## Opening priority
+## Going first
 
-The routing-cursor toss is an even 50/50 chance. The winner deploys first and resolves first in every sequence, trading hidden information for tempo: the second side sees the first deployment before placing its own team, while the first side gets the earliest chance to complete work or remove a vulnerable rival. Office layout is locked before the toss, so build a layout that can absorb either result.
+The top-down routing-cursor spin is an even 50/50 chance. The side it points toward deploys first and resolves first in every sequence, trading hidden information for tempo: the second side sees the first deployment before placing its own team, while the first side gets the earliest chance to complete work or remove a vulnerable rival. Office layout is locked before the spin, so build a layout that can absorb either result.
 
 ## Sanity pressure
 

@@ -523,7 +523,7 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
     setDeploymentTurn(null);
     setPhase("plan");
     setProjectNudge(null);
-    setEvent(`${initiativeWinner === "enemy" ? opponent.teamName : "Your team"} has opening priority. Choose a project and plan Sprint 01.`);
+    setEvent(`${initiativeWinner === "enemy" ? opponent.teamName : "Your team"} goes first. Choose a project and plan Sprint 01.`);
     setEventTone("good");
     showAnnouncement("SPRINT PLANNING", `${initiativeWinner === "enemy" ? opponent.teamName : "Your team"} acts first in every sequence`, initiativeWinner === "enemy" ? "pink" : "cyan");
   };
@@ -539,7 +539,7 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
   const deployEnemyTeam = async (runId: number) => {
     setPhase("deploy");
     setDeploymentTurn("enemy");
-    setEvent(`${opponent.teamName} won this deployment turn.`);
+    setEvent(`${opponent.teamName} goes first and is deploying now.`);
     setEventTone("bad");
     showAnnouncement("RIVAL DEPLOYMENT", `${opponent.name}'s signature team is taking the board`, "pink");
     await wait(850);
@@ -564,13 +564,13 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
     const first = Math.random() < .5 ? "player" : "enemy";
     setInitiativeWinner(first);
     setInitiativeToss({ winner: first, stage: "spinning" });
-    setEvent("Routing the opening cursor…");
+    setEvent("Spinning the cursor to see who goes first…");
     setEventTone("neutral");
     playBattleSound("wheelSpin");
     await wait(2700);
     if (openingRun.current !== runId) return;
     setInitiativeToss({ winner: first, stage: "result" });
-    setEvent(first === "player" ? "The cursor chose you. Deploy first." : `The cursor chose ${opponent.teamName}. Rival deploys first.`);
+    setEvent(first === "player" ? "You go first. Deploy your team." : `${opponent.name} goes first. Rival deploys now.`);
     setEventTone(first === "player" ? "good" : "bad");
     playBattleSound("needleLand");
     await wait(1250);
@@ -1016,10 +1016,10 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
     setEvent("Set up your office before the first sprint begins.");
   };
 
-  return <main className={`battle-screen ${phase === "setup" ? "setup-active" : ""} ${phase === "initiative" || phase === "deploy" ? "opening-active" : ""}`}>
+  return <main className={`battle-screen ${phase === "setup" ? "setup-active" : ""} ${phase === "initiative" ? "initiative-active" : ""} ${phase === "deploy" ? "opening-active" : ""}`}>
     <div className="battle-hud">
       <div className="hud-stack player-hud-stack"><PlayerHud owner="player" name="YOU // LOCALHOST" sanity={playerSanity} max={30} project={playerProject} targeted={highlight?.targetId === "player-lead"} /></div>
-      <div className={`turn-pill ${phase === "setup" ? "setup" : phase === "initiative" ? "initiative" : phase === "deploy" ? "deployment" : ""}`}><span>{phase === "setup" ? "OFFICE" : phase === "initiative" ? "PRIORITY" : phase === "deploy" ? "DEPLOY" : "SPRINT"}</span><b>{phase === "setup" ? `${configuredAreas}/4` : phase === "initiative" ? "50/50" : phase === "deploy" ? String(deploymentTurn === "enemy" ? enemySlots.flatMap((slot) => slot.developers).length : placed.length).padStart(2, "0") : String(turn).padStart(2, "0")}</b><small>{phase === "setup" ? "LAYOUT SETUP" : phase === "initiative" ? "CURSOR TOSS" : phase === "deploy" ? `${deploymentTurn === "enemy" ? "RIVAL" : "YOUR"} TEAM` : phase === "resolving" ? `SEQUENCE ${seqActive ?? 1}/${SEQUENCE_COUNT}` : phase === "brag" ? "BRAG WINDOW" : "PLANNING"}</small></div>
+      <div className={`turn-pill ${phase === "setup" ? "setup" : phase === "initiative" ? "initiative" : phase === "deploy" ? "deployment" : ""}`}><span>{phase === "setup" ? "OFFICE" : phase === "initiative" ? "FIRST MOVE" : phase === "deploy" ? "DEPLOY" : "SPRINT"}</span><b>{phase === "setup" ? `${configuredAreas}/4` : phase === "initiative" ? initiativeToss?.stage === "result" ? initiativeToss.winner === "player" ? "YOU" : opponent.initials : "?" : phase === "deploy" ? String(deploymentTurn === "enemy" ? enemySlots.flatMap((slot) => slot.developers).length : placed.length).padStart(2, "0") : String(turn).padStart(2, "0")}</b><small>{phase === "setup" ? "LAYOUT SETUP" : phase === "initiative" ? initiativeToss?.stage === "result" ? "GOES FIRST" : "CURSOR SPIN" : phase === "deploy" ? `${deploymentTurn === "enemy" ? "RIVAL" : "YOUR"} TEAM` : phase === "resolving" ? `SEQUENCE ${seqActive ?? 1}/${SEQUENCE_COUNT}` : phase === "brag" ? "BRAG WINDOW" : "PLANNING"}</small></div>
       <div className="hud-stack enemy-hud-stack">
         <PlayerHud owner="enemy" name={opponent.teamName} avatarText={opponent.initials} sanity={enemySanity} max={30} project={enemyProject} targeted={highlight?.targetId === "enemy-lead"} />
         <button type="button" className={`hud-brag-button ${brags.length ? "armed" : "locked"} ${phase === "brag" ? "ready" : ""}`} onClick={tryUseBrag} aria-label={brags.length ? `Use Brag. ${brags.length} available.` : "Brag locked. Complete a project first."}>
@@ -1038,7 +1038,7 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
     </div>}
 
     <div className={`board-viewport ${phase === "setup" ? "setup-board" : ""}`}>
-      <div className="board-world" style={{ transform: `translateX(calc(-50% + ${cameraX}px)) translateY(${phase === "setup" ? -82 : -115}px) rotateX(${cameraTilt}deg) scale(${(phase === "setup" ? .86 : .8) * cameraZoom})` }}>
+      <div className="board-world" style={{ transform: phase === "initiative" ? "translateX(-50%) translateY(-8px) rotateX(0deg) scale(.72)" : `translateX(calc(-50% + ${cameraX}px)) translateY(${phase === "setup" ? -82 : -115}px) rotateX(${cameraTilt}deg) scale(${(phase === "setup" ? .86 : .8) * cameraZoom})` }}>
         <div className="board-surface">
           <div className="lane-label enemy-lane">RIVAL OFFICE</div>
           <div className="slot-row enemy-row">{enemySlots.map((slot, i) => <BoardSlotView key={i} slot={slot} index={i} owner="enemy" highlight={highlight} tauntTargetRequest={tauntTargetRequest} onSelectTauntTarget={selectTauntTarget} onInspect={(placedDev) => setInspectedDeveloper({ devId: placedDev.devId, placed: placedDev, owner: "enemy" })} />)}</div>
@@ -1048,12 +1048,12 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
         </div>
       </div>
       <button className="battle-menu-trigger" onClick={() => setMenuOpen(true)} aria-label="Open battle menu"><Menu size={20} /><span><b>MENU</b><small>SETTINGS</small></span></button>
-      <div className="camera-controls camera-pad">
+      {phase !== "initiative" && <div className="camera-controls camera-pad">
         <button aria-label="Tilt board up" title="Hold to tilt up" {...holdProps(() => setCameraTilt((tilt) => clamp(tilt - 1.25, 38, 68)))}><ChevronUp /></button>
         <div><button aria-label="Pan board left" title="Hold to pan left" {...holdProps(() => setCameraX((x) => clamp(x - 20, -380, 380)))}><ChevronLeft /></button><span><MousePointer2 size={13} /><b>{Math.round(cameraTilt)}°</b><small>HOLD TO MOVE</small></span><button aria-label="Pan board right" title="Hold to pan right" {...holdProps(() => setCameraX((x) => clamp(x + 20, -380, 380)))}><ChevronRight /></button></div>
         <button aria-label="Tilt board down" title="Hold to tilt down" {...holdProps(() => setCameraTilt((tilt) => clamp(tilt + 1.25, 38, 68)))}><ChevronDown /></button>
         <div className="zoom-controls"><button aria-label="Zoom board out" title="Hold to zoom out" {...holdProps(() => setCameraZoom((zoom) => clamp(zoom - .025, .72, 1.3)))}><ZoomOut /></button><span><b>{Math.round(cameraZoom * 100)}%</b><small>ZOOM</small></span><button aria-label="Zoom board in" title="Hold to zoom in" {...holdProps(() => setCameraZoom((zoom) => clamp(zoom + .025, .72, 1.3)))}><ZoomIn /></button></div>
-      </div>
+      </div>}
       {announcement && <div key={announcement.key} className={`stage-announcement ${announcement.tone}`}><small>{phase === "setup" ? "PRE-BATTLE" : phase === "deploy" ? "OPENING DEPLOYMENT" : "ACTIVE PLAYER"}</small><b>{announcement.title}</b><span>{announcement.subtitle}</span></div>}
       {bragNudge && <div key={bragNudge} className="project-required-warning brag-required-warning" role="status" aria-live="polite"><img src="/ui/brag-burst.png" alt="" /><span><b>COMPLETE A PROJECT FIRST</b><small>{phase === "setup" ? "Finish office setup, then claim and complete a project." : playerProject ? `Reach ${playerProject.name}'s MVP to unlock a Brag.` : "Claim work from the shared backlog and complete its MVP."}</small></span></div>}
       {phase === "plan" && projectNudge && !bragNudge && <div key={projectNudge} className="project-required-warning" role="status" aria-live="polite"><AlertTriangle size={18} /><span><b>SELECT A PROJECT FIRST</b><small>Claim work from the shared backlog, then plan your sprint.</small></span></div>}
@@ -1108,17 +1108,15 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
 
 function InitiativeToss({ state, opponent }: { state: InitiativeTossState; opponent: CampaignLead }) {
   const playerWon = state.winner === "player";
+  const landingAngle = playerWon ? "1655deg" : "1475deg";
   return <div className={`initiative-overlay ${state.stage} winner-${state.winner}`} role="status" aria-live="polite">
-    <section className="initiative-card">
-      <small>OPENING PRIORITY · 50 / 50</small>
-      <h2>{state.stage === "spinning" ? "Who deploys first?" : playerWon ? "You have priority." : `${opponent.name} has priority.`}</h2>
-      <div className="initiative-track">
-        <div className={`initiative-side player ${state.stage === "result" && playerWon ? "chosen" : ""}`}><span>YO</span><b>YOU</b><small>LOCALHOST</small></div>
-        <div className="initiative-rail"><i /><div className="initiative-cursor" style={{ "--cursor-end": playerWon ? "-145px" : "145px" } as React.CSSProperties}><img src="/ui/project-cursor.png" alt="" /></div></div>
-        <div className={`initiative-side enemy ${state.stage === "result" && !playerWon ? "chosen" : ""}`}><span>{opponent.initials}</span><b>{opponent.name}</b><small>{opponent.teamName}</small></div>
-      </div>
-      <p>{state.stage === "spinning" ? "The routing cursor is choosing an opening side…" : `${playerWon ? "Your team" : opponent.teamName} deploys first and acts first in each sequence.`}</p>
-    </section>
+    <div className="initiative-callout"><small>STARTING PLAYER · 50 / 50</small><h2>{state.stage === "spinning" ? "WHO GOES FIRST?" : playerWon ? "YOU GO FIRST" : `${opponent.name.toUpperCase()} GOES FIRST`}</h2><p>{state.stage === "spinning" ? "The cursor decides." : `${playerWon ? "You deploy first" : `${opponent.teamName} deploys first`} and takes the first action in every sequence.`}</p></div>
+    <div className="initiative-spinner">
+      <span className={`initiative-target rival ${state.stage === "result" && !playerWon ? "chosen" : ""}`}><b>{opponent.initials}</b><small>RIVAL</small></span>
+      <i className="initiative-spin-ring" />
+      <div className="initiative-cursor" style={{ "--cursor-end-angle": landingAngle } as React.CSSProperties}><img src="/ui/project-cursor.png" alt="" /></div>
+      <span className={`initiative-target player ${state.stage === "result" && playerWon ? "chosen" : ""}`}><b>YO</b><small>YOU</small></span>
+    </div>
   </div>;
 }
 
