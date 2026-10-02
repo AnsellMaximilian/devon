@@ -14,7 +14,7 @@ Every battle begins in a dedicated Office Setup stage. A short stage announcemen
 
 During deployment, every available desk is an independent target. After selecting a developer from the hand, choose the exact empty desk inside the work area instead of having the game fill desks in a fixed order. Open Space exposes a 2×2 set of four desks; Cubicles presents exactly two taller desks with no placeholder cells.
 
-The starter collection excludes every campaign Lead and signature-team developer. Campaign victories award one random, previously locked developer from that Lead's visible reward cache; the unlock and current deck are stored locally. An unlocked reward is added to the deck automatically when there is room, and can then be used like any other collected developer. Boss Leads remain encounter-only cards.
+The starter collection excludes every campaign Lead and signature-team developer. Campaign victories spin the Lead's full visible reward cache, then award one random, previously locked developer when the roulette stops. The unlock and current deck are stored locally. An unlocked reward is added to the deck automatically when there is room, and can then be used like any other collected developer. Boss Leads remain encounter-only cards.
 
 At battle start, the player reveals five developers from their deck. At the beginning of later turns, they draw one up to a hand limit of five. Chad's Nepotism can increase this to two when he is in open space. Each successful turn-start draw is presented as a short deal from the draw pile into the hand before the new card becomes interactive. Aiden can only enter cubicles.
 
@@ -28,7 +28,7 @@ The board camera supports horizontal panning, vertical tilt, and bounded zoom fr
 
 Projects are placed into a shared backlog. Claiming one locks the player to it and prevents the opponent from claiming it. A player may abandon an unfinished project, reset its progress, return it to the backlog, and lose 3 sanity.
 
-Only the currently claimed project remains on the battle HUD. The shared backlog opens in a dedicated project picker: inspect every task, task type, MVP value, dependency, and Brag reward, then explicitly confirm the claim. Abandoning also requires a separate confirmation. The Brag control always hangs beneath the rival's sanity display: it is visibly locked until a project completes, and selecting it while locked calls attention back to the active project or backlog selector.
+Each side's currently claimed project appears directly beneath its sanity bar, including live MVP and completed-task progress. The shared backlog opens in a dedicated project picker: inspect every task, task type, MVP value, dependency, and Brag reward, then explicitly confirm the claim. Abandoning also requires a separate confirmation. The Brag control sits to the left of the rival's sanity display: it is visibly locked until a project completes, and selecting it while locked calls attention back to the active project or backlog selector.
 
 Every project task is Frontend, Backend, or Mobile. Completing it contributes the printed points to the project's MVP meter. Reaching the MVP threshold completes the project and banks a Brag whose damage is printed on that project. Only one Brag can be used each turn; additional Brags remain banked. Work actions after the project completes are moot.
 
@@ -61,7 +61,7 @@ Available actions are:
 
 Different developers are scheduled in parallel inside a sequence, but the battle presentation reveals them one by one so every result is readable. Each sequence gets a full-screen announcement. The current actor leaves the board and appears on a dedicated action stage: Skip receives a visible stamp; Taunt shows one speech bubble before the attacker lunges, the target recoils, and sanity drains; and Work shows the task beside a percentage wheel before project progress advances. The wheel keeps the action's success chance fixed on screen while its needle resolves the hidden roll. If an earlier action has already completed a queued task (or the whole MVP), that later ticket automatically becomes a clearly labeled **Already Shipped** skip instead of rolling again. The rival team receives the same presentation.
 
-The planner is an editor, not a commit action. **Save sprint plan** closes it while preserving the queue, allowing the player to inspect the board or revise the plan again. The separate circular **Sprint!** control is the only way to launch the queue. It opens a final warning with the active project and assigned-action count; confirming ends the planning phase and begins sequence resolution. Launching an empty queue is allowed but called out explicitly.
+The planner is an editor, not a commit action. Every queued Work action also adds that developer's portrait to the targeted task in the task list, with a count badge when several actions stack on the same requirement. **Save sprint plan** closes it while preserving the queue, allowing the player to inspect the board or revise the plan again. The separate circular **Sprint!** control is the only way to launch the queue. It opens a final warning with the active project and assigned-action count; confirming ends the planning phase and begins sequence resolution. Launching an empty queue is allowed but called out explicitly.
 
 ## Current MVP balance constants
 

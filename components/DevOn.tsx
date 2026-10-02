@@ -338,6 +338,7 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
   const playerDeploymentReady = !canDeployOpeningCard;
   const deckRemaining = Math.max(0, shuffledDeck.current.length - drawIndex);
   const plannedActions = Object.values(plan).filter((action) => action !== "skip").length;
+  const showHudProjects = phase !== "setup" && phase !== "initiative" && phase !== "deploy";
   const playBattleSound = (effect: SoundEffect) => playSfx(effect, soundEnabled.current);
 
   useEffect(() => {
@@ -1018,24 +1019,24 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
 
   return <main className={`battle-screen ${phase === "setup" ? "setup-active" : ""} ${phase === "initiative" ? "initiative-active" : ""} ${phase === "deploy" ? "opening-active" : ""}`}>
     <div className="battle-hud">
-      <div className="hud-stack player-hud-stack"><PlayerHud owner="player" name="YOU // LOCALHOST" sanity={playerSanity} max={30} project={playerProject} targeted={highlight?.targetId === "player-lead"} /></div>
+      <div className="hud-stack player-hud-stack">
+        <PlayerHud owner="player" name="YOU // LOCALHOST" sanity={playerSanity} max={30} targeted={highlight?.targetId === "player-lead"} />
+        {showHudProjects && <HudProjectCard owner="player" project={playerProject} attention={!!(projectNudge || bragNudge)} onClick={playerProject ? () => { setBragNudge(null); setProjectModalOpen(true); } : openProjectPicker} />}
+        {showHudProjects && (projectNudge || bragNudge) && <img key={projectNudge ?? bragNudge} className="hud-project-pointer" src="/ui/project-cursor.png" alt="" aria-hidden="true" />}
+      </div>
       <div className={`turn-pill ${phase === "setup" ? "setup" : phase === "initiative" ? "initiative" : phase === "deploy" ? "deployment" : ""}`}><span>{phase === "setup" ? "OFFICE" : phase === "initiative" ? "FIRST MOVE" : phase === "deploy" ? "DEPLOY" : "SPRINT"}</span><b>{phase === "setup" ? `${configuredAreas}/4` : phase === "initiative" ? initiativeToss?.stage === "result" ? initiativeToss.winner === "player" ? "YOU" : opponent.initials : "?" : phase === "deploy" ? String(deploymentTurn === "enemy" ? enemySlots.flatMap((slot) => slot.developers).length : placed.length).padStart(2, "0") : String(turn).padStart(2, "0")}</b><small>{phase === "setup" ? "LAYOUT SETUP" : phase === "initiative" ? initiativeToss?.stage === "result" ? "GOES FIRST" : "CURSOR SPIN" : phase === "deploy" ? `${deploymentTurn === "enemy" ? "RIVAL" : "YOUR"} TEAM` : phase === "resolving" ? `SEQUENCE ${seqActive ?? 1}/${SEQUENCE_COUNT}` : phase === "brag" ? "BRAG WINDOW" : "PLANNING"}</small></div>
       <div className="hud-stack enemy-hud-stack">
-        <PlayerHud owner="enemy" name={opponent.teamName} avatarText={opponent.initials} sanity={enemySanity} max={30} project={enemyProject} targeted={highlight?.targetId === "enemy-lead"} />
         <button type="button" className={`hud-brag-button ${brags.length ? "armed" : "locked"} ${phase === "brag" ? "ready" : ""}`} onClick={tryUseBrag} aria-label={brags.length ? `Use Brag. ${brags.length} available.` : "Brag locked. Complete a project first."}>
           <img src="/ui/brag-burst.png" alt="" />
           {!brags.length && <span><LockKeyhole size={10} /> LOCKED</span>}
           {!!brags.length && <em>{brags.length}</em>}
         </button>
+        <PlayerHud owner="enemy" name={opponent.teamName} avatarText={opponent.initials} sanity={enemySanity} max={30} targeted={highlight?.targetId === "enemy-lead"} />
+        {showHudProjects && <HudProjectCard owner="enemy" project={enemyProject} />}
       </div>
     </div>
 
-    {phase === "setup" || phase === "initiative" || phase === "deploy" ? <div className="setup-console-spacer" aria-hidden="true" /> : <div className="project-console">
-      {playerProject ? <button className={`active-project-card ${bragNudge ? "needs-attention" : ""}`} onClick={() => { setBragNudge(null); setProjectModalOpen(true); }} style={{ "--project": playerProject.accent, "--project-progress": `${clamp((playerProject.progress / playerProject.mvp) * 100, 0, 100)}%` } as React.CSSProperties}>
-        <span className="project-icon"><BriefcaseBusiness size={16} /></span><span className="active-project-name"><b>{playerProject.name}</b><small>{playerProject.progress}/{playerProject.mvp} MVP</small></span><em>{playerProject.tasks.filter((t) => playerProject.tasksState[t.id].completed).length}/{playerProject.tasks.length} TASKS</em><ChevronRight size={14} />
-      </button> : <button className={`select-project-button ${projectNudge || bragNudge ? "needs-attention" : ""}`} onClick={openProjectPicker} disabled={phase !== "plan"}><Plus size={16} /><span><b>Select a project</b><small>Review scope before committing</small></span><ChevronRight size={16} /></button>}
-      {(projectNudge || bragNudge) && <img key={projectNudge ?? bragNudge} className="project-pointer" src="/ui/project-cursor.png" alt="" aria-hidden="true" />}
-    </div>}
+    <div className="setup-console-spacer" aria-hidden="true" />
 
     <div className={`board-viewport ${phase === "setup" ? "setup-board" : ""}`}>
       <div className="board-world" style={{ transform: phase === "initiative" ? "translateX(-50%) translateY(-8px) rotateX(0deg) scale(.72)" : `translateX(calc(-50% + ${cameraX}px)) translateY(${phase === "setup" ? -82 : -115}px) rotateX(${cameraTilt}deg) scale(${(phase === "setup" ? .86 : .8) * cameraZoom})` }}>
@@ -1102,7 +1103,7 @@ function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }
       </div>}
       <footer><Settings size={14} /> LOCAL SESSION · SINGLEPLAYER MVP</footer>
     </section></div>}
-    {phase === "gameover" && <div className="gameover-overlay"><div className={`gameover-card ${winner} ${battleReward ? "with-reward" : ""}`}><div className="burst" /><Trophy size={54} /><span>{winner === "player" ? "SHIP HAPPENS" : "PROD IS DOWN"}</span><h2>{winner === "player" ? "You shipped it." : "You burned out."}</h2><p>{winner === "player" ? battleReward ? `${opponent.teamName} dropped a new developer card.` : "The rival lead has no sanity left. This reward cache is already complete." : "Your sanity hit zero. The backlog wins this round."}</p>{battleReward && <div className="victory-reward" style={{ "--accent": battleReward.accent } as React.CSSProperties}><img src={battleReward.art} alt={battleReward.name} /><span><small>NEW DEVELOPER UNLOCKED</small><b>{battleReward.name}</b><em>{battleReward.role} · {battleReward.traitLabel}</em><strong>Added to your collection{deck.length < 20 ? " and deck" : ""}</strong></span></div>}<div><button className="primary-cta small" onClick={resetBattle}><RotateCcw size={17} /> Rematch</button><button className="secondary-cta" onClick={onExit}>Campaign</button></div></div></div>}
+    {phase === "gameover" && <div className="gameover-overlay"><div className={`gameover-card ${winner} ${battleReward ? "with-reward" : ""}`}><div className="burst" /><Trophy size={54} /><span>{winner === "player" ? "SHIP HAPPENS" : "PROD IS DOWN"}</span><h2>{winner === "player" ? "You shipped it." : "You burned out."}</h2><p>{winner === "player" ? battleReward ? `${opponent.teamName} opened its campaign reward cache.` : "The rival lead has no sanity left. This reward cache is already complete." : "Your sanity hit zero. The backlog wins this round."}</p>{battleReward && <RewardRoulette candidates={opponent.rewards.map(getDeveloper)} winner={battleReward} addedToDeck={deck.length < 20} />}<div><button className="primary-cta small" onClick={resetBattle}><RotateCcw size={17} /> Rematch</button><button className="secondary-cta" onClick={onExit}>Campaign</button></div></div></div>}
   </main>;
 }
 
@@ -1117,6 +1118,49 @@ function InitiativeToss({ state, opponent }: { state: InitiativeTossState; oppon
       <div className="initiative-cursor" style={{ "--cursor-end-angle": landingAngle } as React.CSSProperties}><img src="/ui/project-cursor.png" alt="" /></div>
       <span className={`initiative-target player ${state.stage === "result" && playerWon ? "chosen" : ""}`}><b>YO</b><small>YOU</small></span>
     </div>
+  </div>;
+}
+
+function HudProjectCard({ owner, project, attention = false, onClick }: { owner: Owner; project?: ProjectState; attention?: boolean; onClick?: () => void }) {
+  const completedTasks = project?.tasks.filter((task) => project.tasksState[task.id].completed).length ?? 0;
+  const style = project ? { "--project": project.accent, "--project-progress": `${clamp((project.progress / project.mvp) * 100, 0, 100)}%` } as React.CSSProperties : undefined;
+  const content = project ? <>
+    <span className="hud-project-icon"><BriefcaseBusiness size={13} /></span>
+    <span className="hud-project-copy"><small>{owner === "player" ? "YOUR PROJECT" : "RIVAL PROJECT"}</small><b>{project.name}</b></span>
+    <span className="hud-project-progress"><b>{project.progress}/{project.mvp}</b><small>MVP</small></span>
+    <em>{completedTasks}/{project.tasks.length}</em>
+    {owner === "player" && <ChevronRight size={13} />}
+  </> : <>
+    <span className="hud-project-icon">{owner === "player" ? <Plus size={13} /> : <BriefcaseBusiness size={13} />}</span>
+    <span className="hud-project-copy"><small>{owner === "player" ? "YOUR PROJECT" : "RIVAL PROJECT"}</small><b>{owner === "player" ? "Select a project" : "No active project"}</b></span>
+    {owner === "player" && <ChevronRight size={13} />}
+  </>;
+
+  if (owner === "enemy") return <div className="hud-project-card enemy" style={style} role="status" aria-label={project ? `Rival project: ${project.name}, ${project.progress} of ${project.mvp} MVP` : "Rival has no active project"}>{content}</div>;
+  return <button type="button" className={`hud-project-card player ${attention ? "needs-attention" : ""} ${project ? "active" : "empty"}`} style={style} onClick={onClick}>{content}</button>;
+}
+
+function RewardRoulette({ candidates, winner, addedToDeck }: { candidates: Developer[]; winner: Developer; addedToDeck: boolean }) {
+  const [revealed, setRevealed] = useState(false);
+  const winnerIndex = Math.max(0, candidates.findIndex((candidate) => candidate.id === winner.id));
+  const segment = 360 / Math.max(candidates.length, 1);
+  const endAngle = 1440 - winnerIndex * segment;
+
+  useEffect(() => {
+    const timer = setTimeout(() => setRevealed(true), 2750);
+    return () => clearTimeout(timer);
+  }, [winner.id]);
+
+  return <div className={`reward-roulette ${revealed ? "revealed" : "spinning"}`} style={{ "--reward-end-angle": `${endAngle}deg`, "--reward-accent": winner.accent } as React.CSSProperties}>
+    <div className="reward-roulette-heading"><small>{revealed ? "CAMPAIGN DROP LOCKED" : "ROLLING CAMPAIGN CACHE"}</small><b>{revealed ? `${winner.name.toUpperCase()} UNLOCKED` : "WHO JOINS YOUR TEAM?"}</b></div>
+    <div className="reward-wheel" aria-hidden="true">
+      <span className="reward-wheel-pointer"><ChevronDown size={18} /></span>
+      <div className="reward-wheel-track">{candidates.map((candidate, index) => {
+        const angle = index * segment;
+        return <span className={`reward-wheel-slot ${candidate.id === winner.id ? "winner" : ""}`} key={candidate.id} style={{ "--reward-angle": `${angle}deg` } as React.CSSProperties}><span style={{ "--reward-counter-start": `${-angle}deg`, "--reward-counter-end": `${-(angle + endAngle)}deg`, "--accent": candidate.accent } as React.CSSProperties}><img src={candidate.art} alt="" /><b>{candidate.name}</b></span></span>;
+      })}</div>
+    </div>
+    <div className="reward-result" role="status" aria-live="polite" style={{ "--accent": winner.accent } as React.CSSProperties}><img src={winner.art} alt={winner.name} /><span><small>NEW DEVELOPER UNLOCKED</small><b>{winner.name}</b><em>{winner.role} · {winner.traitLabel}</em><strong>Added to your collection{addedToDeck ? " and deck" : ""}</strong></span></div>
   </div>;
 }
 
@@ -1176,7 +1220,7 @@ function DeveloperDetails({ inspected, onClose }: { inspected: InspectedDevelope
   </section></div>;
 }
 
-function PlayerHud({ owner, name, sanity, max, project, avatarText, targeted = false }: { owner: Owner; name: string; sanity: number; max: number; project?: ProjectState; avatarText?: string; targeted?: boolean }) {
+function PlayerHud({ owner, name, sanity, max, avatarText, targeted = false }: { owner: Owner; name: string; sanity: number; max: number; avatarText?: string; targeted?: boolean }) {
   const rain = owner === "player" ? ["01", "</>", "npm", "101", "git", "{}", "dev", "011"] : ["ERR", "404", "NULL", "010", "BUG", "!", "500", "ptr"];
   return <div className={`player-hud ${owner} ${targeted ? "targeted" : ""}`}>
     <span className="matrix-rain" aria-hidden="true">{rain.map((glyphs, index) => <i key={`${glyphs}-${index}`} style={{ "--matrix-x": `${6 + index * 12}%`, "--matrix-delay": `${-index * .47}s`, "--matrix-speed": `${2.9 + index % 3 * .7}s` } as React.CSSProperties}>{glyphs}</i>)}</span>
@@ -1291,6 +1335,13 @@ function ActionStageView({ stage }: { stage: ActionStage }) {
 function Planner({ developers, opponents, project, plan, setPlan, onRequestTaunt, onClose, onSave }: { developers: PlacedDev[]; opponents: PlacedDev[]; project?: ProjectState; plan: Record<string, PlannedAction>; setPlan: (p: Record<string, PlannedAction>) => void; onRequestTaunt: (key: string, placed: PlacedDev, sequence: number) => void; onClose: () => void; onSave: () => void }) {
   const [editing, setEditing] = useState<{ key: string; placed: PlacedDev; sequence: number } | null>(null);
   const set = (key: string, value: PlannedAction) => setPlan({ ...plan, [key]: value });
+  const assignmentsForTask = (taskId: string) => Object.entries(plan).flatMap(([key, action]) => {
+    if (action !== `work:${taskId}`) return [];
+    const separator = key.lastIndexOf("-");
+    const placed = developers.find((candidate) => candidate.instanceId === key.slice(0, separator));
+    if (!placed) return [];
+    return [{ key, developer: getDeveloper(placed.devId), sequence: Number(key.slice(separator + 1)) }];
+  });
   const tauntLabel = (action: PlannedAction) => {
     if (!action.startsWith("taunt:")) return "Taunt";
     const id = action.slice(6);
@@ -1312,7 +1363,10 @@ function Planner({ developers, opponents, project, plan, setPlan, onRequestTaunt
         return <td key={key}><button className={`matrix-action ${action === "skip" ? "empty" : isTaunt ? "taunt" : "work"}`} aria-label={`${dev.name} sequence ${i + 1}: ${label}`} onClick={() => setEditing({ key, placed, sequence: i + 1 })}>{action === "skip" ? <><Plus size={15} /><span>Assign action</span></> : isTaunt ? <><AlertTriangle size={15} /><span>{tauntLabel(action)}</span></> : <><Code2 size={15} /><span>{task?.title}</span></>}</button></td>;
       })}</tr>;
     })}</tbody></table></div>}
-    <div className="task-legend">{project?.tasks.map((task) => <div key={task.id} className={project.tasksState[task.id].completed ? "complete" : ""}><span className={`role-dot ${task.type.toLowerCase()}`} /><span><b>{task.title}</b><small>{task.type} · +{task.points} MVP{task.dependsOn ? ` · linked +${task.coupling}%` : ""}</small></span><em>{project.tasksState[task.id].completed ? "DONE" : `${project.tasksState[task.id].marks} MARKS`}</em></div>)}</div>
+    <div className="task-legend">{project?.tasks.map((task) => {
+      const assignments = assignmentsForTask(task.id);
+      return <div key={task.id} className={project.tasksState[task.id].completed ? "complete" : ""}><span className={`role-dot ${task.type.toLowerCase()}`} /><span><b>{task.title}</b><small>{task.type} · +{task.points} MVP{task.dependsOn ? ` · linked +${task.coupling}%` : ""}</small></span><span className="task-plan-status"><em>{project.tasksState[task.id].completed ? "DONE" : `${project.tasksState[task.id].marks} MARKS`}</em>{assignments.length > 0 && <span className="task-assignees" aria-label={`${assignments.length} planned ${assignments.length === 1 ? "action" : "actions"} on ${task.title}`}>{assignments.slice(0, 4).map(({ key, developer, sequence }, index) => <img key={key} src={developer.art} alt={`${developer.name}, sequence ${sequence}`} title={`${developer.name} · sequence ${sequence}`} style={{ "--assignment-index": index } as React.CSSProperties} />)}{assignments.length > 1 && <b>{assignments.length}</b>}</span>}</span></div>;
+    })}</div>
     <footer><button className="secondary-cta" onClick={onClose}>Keep editing</button><button className="primary-cta small" onClick={onSave}><Check size={16} /> Save sprint plan</button></footer>
     {editing && (() => { const dev = getDeveloper(editing.placed.devId); const current = plan[editing.key] ?? "skip"; const legalTasks = project?.tasks.filter((task) => !project.tasksState[task.id].completed) ?? []; return <div className="action-picker-backdrop" onClick={() => setEditing(null)}><div className="action-picker" onClick={(e) => e.stopPropagation()}>
       <header><img src={dev.art} alt="" /><span><small>SEQUENCE {editing.sequence}</small><b>{dev.name}'s action</b><em>{dev.role} · {dev.completion}% base power</em></span><button onClick={() => setEditing(null)}><X size={18} /></button></header>
