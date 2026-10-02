@@ -47,6 +47,7 @@ export type CampaignLead = {
   backstory: string;
   modifierLabel: string;
   modifier: string;
+  signatureLabel: string;
   signatureDeck: string[];
   rewards: string[];
   rotatingCards: number;
@@ -63,6 +64,10 @@ export const DEVELOPERS: Developer[] = [
   { id: "aiden", name: "Aiden", role: "Full Stack", completion: 88, sanity: 6, traitLabel: "Deep Focus", trait: "Cannot enter open space. +8% completion in a cubicle.", quote: "…I already pushed the fix.", art: "/developers/aiden.png", accent: "#a26aff" },
   { id: "tigor", name: "Tigor", role: "Mobile", completion: 76, sanity: 12, traitLabel: "Spotter", trait: "Mobile tasks completed from his slot add +2 MVP.", quote: "One more rep. One more release.", art: "/developers/tigor.png", accent: "#ff8c35" },
   { id: "wendy", name: "Wendy", role: "Frontend", completion: 70, sanity: 9, traitLabel: "Harmony", trait: "Allies in her open space take 1 less sanity damage.", quote: "Pixel-perfect, pitch-perfect.", art: "/developers/wendy-v2.png", accent: "#ff63ad" },
+  { id: "irene", name: "Irene", role: "Full Stack", completion: 85, sanity: 13, traitLabel: "Center Stage", trait: "Red Velvet teammates in her open space gain +8% completion.", quote: "Again from the top. This deploy lands on beat.", art: "/developers/irene.png", accent: "#e3344f" },
+  { id: "seulgi", name: "Seulgi", role: "Backend", completion: 82, sanity: 11, traitLabel: "Dual Concept", trait: "Takes only a small cross-role penalty when working on Frontend tasks.", quote: "Cute interface. Monster infrastructure.", art: "/developers/seulgi.png", accent: "#d7362f" },
+  { id: "joy", name: "Joy", role: "Mobile", completion: 75, sanity: 10, traitLabel: "Viral Loop", trait: "Her completed Mobile tasks add +1 MVP.", quote: "If it sparks joy, ship it to production.", art: "/developers/joy.png", accent: "#ff665e" },
+  { id: "yeri", name: "Yeri", role: "Frontend", completion: 72, sanity: 9, traitLabel: "Maknae Momentum", trait: "Gains +10% completion during the fourth sequence.", quote: "Last ticket, best ticket.", art: "/developers/yeri.png", accent: "#ff4f91" },
   { id: "stewart", name: "Stewart", role: "Full Stack", completion: 84, sanity: 14, traitLabel: "Googoo Gaga Code", trait: "Coworkers in his slot lose 8% completion power.", quote: "Friendship compiled successfully!", art: "/developers/stewart.png", accent: "#20d3c2" },
   { id: "priya", name: "Priya", role: "Backend", completion: 80, sanity: 11, traitLabel: "Incident Commander", trait: "The first failed Backend attempt each turn gains no failure mark.", quote: "Breathe. Read the logs.", art: "/developers/priya.png", accent: "#f3bd2f" },
   { id: "mateo", name: "Mateo", role: "Mobile", completion: 71, sanity: 9, traitLabel: "Rapid Prototype", trait: "His first Mobile attempt each turn gains +10% completion.", quote: "It works on my phone!", art: "/developers/mateo.png", accent: "#339cff" },
@@ -86,10 +91,30 @@ export const CAMPAIGN_LEADS: CampaignLead[] = [
     backstory: "Preston inherited a fund, a corner office, and the conviction that leadership is genetic. He staffed his delivery team from the family group chat—then hired Basil to make sure anything actually ships.",
     modifierLabel: "Family Business",
     modifier: "Preston boosts relatives in his open space. Expect high-synergy lanes and Basil cleaning up their mistakes.",
+    signatureLabel: "5 FAMILY CARDS",
     signatureDeck: ["preston", "chad", "bryson", "blair", "basil"],
     rewards: ["bryson", "blair", "basil"],
     rotatingCards: 7,
     projectId: "creator-studio"
+  },
+  {
+    id: "irene-red-velvet",
+    level: 2,
+    name: "Irene",
+    title: "The Comeback Lead",
+    teamName: "RED VELVET LABS",
+    initials: "IR",
+    art: "/developers/irene.png",
+    accent: "#e3344f",
+    tagline: "Every deploy lands on eight counts.",
+    backstory: "Red Velvet Labs treats every release like a comeback stage: rehearsed, polished, and impossible to ignore. Irene runs the sprint with exacting calm while Seulgi, Wendy, Joy, and Yeri turn every ticket into a coordinated performance.",
+    modifierLabel: "Perfect Synchronization",
+    modifier: "Teammates sharing Irene's open space gain +8% completion. Wendy softens taunts while the rest of the lineup converts role-specific work into fast MVP progress.",
+    signatureLabel: "5 MEMBER CARDS",
+    signatureDeck: ["irene", "seulgi", "wendy", "joy", "yeri"],
+    rewards: ["seulgi", "joy", "yeri"],
+    rotatingCards: 7,
+    projectId: "focus-flow"
   }
 ];
 

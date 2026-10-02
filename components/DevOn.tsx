@@ -51,12 +51,12 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
 function createEnemySlots(opponent: CampaignLead): BoardSlot[] {
-  const [lead, heir, brother, sister, fixer] = opponent.signatureDeck;
+  const [lead, teammateA, teammateB, teammateC, teammateD] = opponent.signatureDeck;
   const placed = (devId: string, slot: number, position: number): PlacedDev => ({ instanceId: `cpu-${devId}`, devId, sanity: getDeveloper(devId).sanity, slot, position });
   return [
-    { type: "open", developers: [placed(lead, 0, 0), placed(heir, 0, 1), placed(brother, 0, 2)] },
+    { type: "open", developers: [placed(lead, 0, 0), placed(teammateA, 0, 1), placed(teammateB, 0, 2)] },
     { type: "cubicle", developers: [] },
-    { type: "open", developers: [placed(sister, 2, 0), placed(fixer, 2, 1)] },
+    { type: "open", developers: [placed(teammateC, 2, 0), placed(teammateD, 2, 1)] },
     { type: "cubicle", developers: [] }
   ];
 }
@@ -140,7 +140,7 @@ function Campaign({ deck, selectedLead, onSelectLead, onBack, onDeck, onBattle }
     <header className="campaign-heading">
       <button className="back-btn" onClick={onBack}><ArrowLeft size={18} /> Main menu</button>
       <div><span className="eyebrow-small">SINGLE-PLAYER CAMPAIGN</span><h1>Choose your <em>Lead</em></h1><p>Every boss brings a signature team, a battle modifier, and a different reward pool.</p></div>
-      <div className="campaign-progress"><small>LEAD LADDER</small><b>01 <span>/ 06</span></b></div>
+      <div className="campaign-progress"><small>LEAD LADDER</small><b>{String(selectedLead.level).padStart(2, "0")} <span>/ 06</span></b></div>
     </header>
 
     <nav className="campaign-levels" aria-label="Campaign levels">
@@ -171,7 +171,7 @@ function Campaign({ deck, selectedLead, onSelectLead, onBack, onDeck, onBattle }
           <span className="lead-tagline">“{selectedLead.tagline}”</span>
           <p>{selectedLead.backstory}</p>
           <div className="lead-modifier"><Sparkles size={20} /><span><small>ENCOUNTER MODIFIER</small><b>{selectedLead.modifierLabel}</b><p>{selectedLead.modifier}</p></span></div>
-          <div className="lead-roster-heading"><span>SIGNATURE DECK</span><small>5 FAMILY CARDS + {selectedLead.rotatingCards} ROTATING</small></div>
+          <div className="lead-roster-heading"><span>SIGNATURE DECK</span><small>{selectedLead.signatureLabel} + {selectedLead.rotatingCards} ROTATING</small></div>
           <div className="lead-roster">{signature.map((dev, index) => <button key={dev.id} style={{ "--accent": dev.accent, "--roster-index": index } as React.CSSProperties} title={`${dev.name}: ${dev.traitLabel}`}><img src={dev.art} alt={dev.name} /><span><b>{dev.name}</b><small>{dev.traitLabel}</small></span></button>)}</div>
         </div>
       </article>
@@ -565,10 +565,13 @@ function Battle({ deck, opponent, onExit }: { deck: string[]; opponent: Campaign
     if (dev.id === "nikko" && sequence >= 3) chance += 10;
     if (dev.id === "mateo" && sequence === 1) chance += 10;
     if (dev.id === "omar" && sequence === 1) chance += 12;
+    if (dev.id === "yeri" && sequence === 4) chance += 10;
+    if (dev.id === "seulgi" && task.type === "Frontend") chance += 45;
     if (coworkers.includes("stewart") && dev.id !== "stewart") chance -= 8;
     if (coworkers.includes("valentina") && dev.id !== "valentina" && slots[instance.slot].type === "open") chance += 5;
     if (coworkers.includes("preston") && ["chad", "bryson", "blair"].includes(dev.id) && slots[instance.slot].type === "open") chance += 6;
     if (dev.id === "bryson" && coworkers.includes("chad")) chance += 10;
+    if (coworkers.includes("irene") && ["seulgi", "wendy", "joy", "yeri"].includes(dev.id) && slots[instance.slot].type === "open") chance += 8;
     return clamp(chance, 5, 96);
   };
 
@@ -663,6 +666,7 @@ function Battle({ deck, opponent, onExit }: { deck: string[]; opponent: Campaign
         if (task.type === "Mobile" && coworkers.includes("tigor")) points += 2;
         if (task.type === "Frontend" && coworkers.includes("zara")) points += 1;
         if (task.type === "Frontend" && dev.id === "blair") points += 1;
+        if (task.type === "Mobile" && dev.id === "joy") points += 1;
         project.progress = Math.min(project.mvp, project.progress + points);
         message = `${dev.name} shipped ${task.title} · +${points} MVP`;
         if (project.progress >= project.mvp) {
