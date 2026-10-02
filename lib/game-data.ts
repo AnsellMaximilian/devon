@@ -93,7 +93,7 @@ export const CAMPAIGN_LEADS: CampaignLead[] = [
     modifier: "Preston boosts relatives in his open space. Expect high-synergy lanes and Basil cleaning up their mistakes.",
     signatureLabel: "5 FAMILY CARDS",
     signatureDeck: ["preston", "chad", "bryson", "blair", "basil"],
-    rewards: ["bryson", "blair", "basil"],
+    rewards: ["chad", "bryson", "blair", "basil"],
     rotatingCards: 7,
     projectId: "creator-studio"
   },
@@ -112,7 +112,7 @@ export const CAMPAIGN_LEADS: CampaignLead[] = [
     modifier: "Teammates sharing Irene's open space gain +8% completion. Wendy softens taunts while the rest of the lineup converts role-specific work into fast MVP progress.",
     signatureLabel: "5 MEMBER CARDS",
     signatureDeck: ["irene", "seulgi", "wendy", "joy", "yeri"],
-    rewards: ["seulgi", "joy", "yeri"],
+    rewards: ["seulgi", "wendy", "joy", "yeri"],
     rotatingCards: 7,
     projectId: "focus-flow"
   }

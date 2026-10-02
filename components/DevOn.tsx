@@ -14,7 +14,8 @@ type TaskProgress = { completed: boolean; marks: number };
 type ProjectState = Project & { claimedBy: Owner | null; completed: boolean; progress: number; tasksState: Record<string, TaskProgress> };
 type PlannedAction = "skip" | `taunt:${string}` | `work:${string}`;
 type ActionHighlight = { actorId?: string; targetId?: string; kind: "skip" | "work" | "taunt" };
-type BattlePhase = "setup" | "plan" | "resolving" | "brag" | "gameover";
+type BattlePhase = "setup" | "initiative" | "deploy" | "plan" | "resolving" | "brag" | "gameover";
+type InitiativeTossState = { winner: Owner; stage: "spinning" | "result" };
 type InspectedDeveloper = { devId: string; placed?: PlacedDev; owner?: Owner; handIndex?: number };
 type StageAnnouncement = { key: number; title: string; subtitle: string; tone: "cyan" | "lime" | "pink" };
 type TauntTargetRequest = { key: string; placed: PlacedDev; sequence: number };
@@ -44,20 +45,31 @@ type ActionStage = {
   projectMax?: number;
 };
 
-const starterDeck = DEVELOPERS.map((d) => d.id);
+const campaignDeveloperIds = new Set(CAMPAIGN_LEADS.flatMap((lead) => lead.signatureDeck));
+const starterCollection = DEVELOPERS.filter((developer) => !campaignDeveloperIds.has(developer.id)).map((developer) => developer.id);
+const starterDeck = [...starterCollection];
+const COLLECTION_STORAGE_KEY = "dev-on.collection.v1";
+const DECK_STORAGE_KEY = "dev-on.deck.v1";
 const SEQUENCE_COUNT = 4;
 const emptySlots = (): BoardSlot[] => Array.from({ length: 4 }, () => ({ type: null, developers: [] }));
+const emptyEnemyOffice = (): BoardSlot[] => [
+  { type: "open", developers: [] },
+  { type: "cubicle", developers: [] },
+  { type: "open", developers: [] },
+  { type: "cubicle", developers: [] }
+];
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
-function createEnemySlots(opponent: CampaignLead): BoardSlot[] {
+function enemyDeployment(opponent: CampaignLead): PlacedDev[] {
   const [lead, teammateA, teammateB, teammateC, teammateD] = opponent.signatureDeck;
   const placed = (devId: string, slot: number, position: number): PlacedDev => ({ instanceId: `cpu-${devId}`, devId, sanity: getDeveloper(devId).sanity, slot, position });
   return [
-    { type: "open", developers: [placed(lead, 0, 0), placed(teammateA, 0, 1), placed(teammateB, 0, 2)] },
-    { type: "cubicle", developers: [] },
-    { type: "open", developers: [placed(teammateC, 2, 0), placed(teammateD, 2, 1)] },
-    { type: "cubicle", developers: [] }
+    placed(lead, 0, 0),
+    placed(teammateA, 0, 1),
+    placed(teammateB, 0, 2),
+    placed(teammateC, 2, 0),
+    placed(teammateD, 2, 1)
   ];
 }
 
@@ -90,14 +102,51 @@ function AppHeader({ onHome, onDeck, deckCount, inBattle = false }: { onHome: ()
 export function DevOn() {
   const [view, setView] = useState<View>("home");
   const [deck, setDeck] = useState<string[]>(starterDeck);
+  const [unlockedDeveloperIds, setUnlockedDeveloperIds] = useState<string[]>(starterCollection);
+  const [progressLoaded, setProgressLoaded] = useState(false);
   const [leadId, setLeadId] = useState(CAMPAIGN_LEADS[0].id);
   const selectedLead = CAMPAIGN_LEADS.find((lead) => lead.id === leadId) ?? CAMPAIGN_LEADS[0];
 
-  if (view === "battle") return <Battle deck={deck.length ? deck : starterDeck} opponent={selectedLead} onExit={() => setView("campaign")} />;
+  useEffect(() => {
+    try {
+      const validIds = new Set(DEVELOPERS.map((developer) => developer.id));
+      const savedCollection = JSON.parse(localStorage.getItem(COLLECTION_STORAGE_KEY) ?? "[]");
+      const collected = Array.isArray(savedCollection) ? savedCollection.filter((id): id is string => typeof id === "string" && validIds.has(id)) : [];
+      const collection = [...new Set([...starterCollection, ...collected])];
+      const collectionSet = new Set(collection);
+      const savedDeck = JSON.parse(localStorage.getItem(DECK_STORAGE_KEY) ?? "[]");
+      const copies = new Map<string, number>();
+      const restoredDeck = Array.isArray(savedDeck) ? savedDeck.filter((id): id is string => {
+        if (typeof id !== "string" || !collectionSet.has(id)) return false;
+        const nextCount = (copies.get(id) ?? 0) + 1;
+        copies.set(id, nextCount);
+        return nextCount <= 3;
+      }).slice(0, 20) : [];
+      setUnlockedDeveloperIds(collection);
+      setDeck(restoredDeck.length ? restoredDeck : starterDeck);
+    } catch {
+      setUnlockedDeveloperIds(starterCollection);
+      setDeck(starterDeck);
+    }
+    setProgressLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!progressLoaded) return;
+    localStorage.setItem(COLLECTION_STORAGE_KEY, JSON.stringify(unlockedDeveloperIds));
+    localStorage.setItem(DECK_STORAGE_KEY, JSON.stringify(deck));
+  }, [deck, progressLoaded, unlockedDeveloperIds]);
+
+  const unlockCampaignReward = (developerId: string) => {
+    setUnlockedDeveloperIds((current) => current.includes(developerId) ? current : [...current, developerId]);
+    setDeck((current) => current.includes(developerId) || current.length >= 20 ? current : [...current, developerId]);
+  };
+
+  if (view === "battle") return <Battle deck={deck.length ? deck : starterDeck} opponent={selectedLead} unlockedDeveloperIds={unlockedDeveloperIds} onUnlockReward={unlockCampaignReward} onExit={() => setView("campaign")} />;
 
   return <main className="app-shell">
     <AppHeader onHome={() => setView("home")} onDeck={() => setView("deck")} deckCount={deck.length} />
-    {view === "home" ? <Home onCampaign={() => setView("campaign")} onDeck={() => setView("deck")} deckCount={deck.length} /> : view === "deck" ? <DeckBuilder deck={deck} setDeck={setDeck} onBack={() => setView("home")} onBattle={() => setView("campaign")} /> : <Campaign deck={deck} selectedLead={selectedLead} onSelectLead={setLeadId} onBack={() => setView("home")} onDeck={() => setView("deck")} onBattle={() => setView("battle")} />}
+    {view === "home" ? <Home onCampaign={() => setView("campaign")} onDeck={() => setView("deck")} deckCount={deck.length} /> : view === "deck" ? <DeckBuilder deck={deck} setDeck={setDeck} unlockedDeveloperIds={unlockedDeveloperIds} onBack={() => setView("home")} onBattle={() => setView("campaign")} /> : <Campaign deck={deck} unlockedDeveloperIds={unlockedDeveloperIds} selectedLead={selectedLead} onSelectLead={setLeadId} onBack={() => setView("home")} onDeck={() => setView("deck")} onBattle={() => setView("battle")} />}
   </main>;
 }
 
@@ -129,7 +178,7 @@ function Home({ onCampaign, onDeck, deckCount }: { onCampaign: () => void; onDec
   </section>;
 }
 
-function Campaign({ deck, selectedLead, onSelectLead, onBack, onDeck, onBattle }: { deck: string[]; selectedLead: CampaignLead; onSelectLead: (id: string) => void; onBack: () => void; onDeck: () => void; onBattle: () => void }) {
+function Campaign({ deck, unlockedDeveloperIds, selectedLead, onSelectLead, onBack, onDeck, onBattle }: { deck: string[]; unlockedDeveloperIds: string[]; selectedLead: CampaignLead; onSelectLead: (id: string) => void; onBack: () => void; onDeck: () => void; onBattle: () => void }) {
   const uniqueDevelopers = new Set(deck).size;
   const roles = (["Frontend", "Backend", "Mobile", "Full Stack"] as const).map((role) => ({ role, count: deck.filter((id) => getDeveloper(id).role === role).length }));
   const previewCards = deck.slice(0, 5).map((id) => getDeveloper(id));
@@ -179,7 +228,7 @@ function Campaign({ deck, selectedLead, onSelectLead, onBack, onDeck, onBattle }
       <aside className="campaign-rewards-panel attached-panel">
         <div className="campaign-panel-label"><span>POSSIBLE REWARDS</span><small>WIN THE SPRINT</small></div>
         <p>Defeat this Lead for one card from the themed reward cache.</p>
-        <div className="reward-cards">{rewards.map((dev, index) => <div key={dev.id} className="reward-card" style={{ "--accent": dev.accent, "--reward-index": index } as React.CSSProperties}><img src={dev.art} alt={dev.name} /><span><small>{dev.role}</small><b>{dev.name}</b><em>{dev.traitLabel}</em></span></div>)}</div>
+        <div className="reward-cards">{rewards.map((dev, index) => { const owned = unlockedDeveloperIds.includes(dev.id); return <div key={dev.id} className={`reward-card ${owned ? "owned" : ""}`} style={{ "--accent": dev.accent, "--reward-index": index } as React.CSSProperties}><img src={dev.art} alt={dev.name} /><span><small>{owned ? "UNLOCKED" : dev.role}</small><b>{dev.name}</b><em>{dev.traitLabel}</em></span>{owned && <Check size={14} />}</div>; })}</div>
         <div className="campaign-stakes"><Shield size={17} /><span><b>30 SANITY</b><small>One battle · no continues</small></span></div>
         <button className="campaign-fight-button" onClick={onBattle}><Swords size={20} /><span><b>FACE THE LEAD</b><small>Start Level {String(selectedLead.level).padStart(2, "0")}</small></span><ChevronRight /></button>
       </aside>
@@ -187,10 +236,11 @@ function Campaign({ deck, selectedLead, onSelectLead, onBack, onDeck, onBattle }
   </section>;
 }
 
-function DeckBuilder({ deck, setDeck, onBack, onBattle }: { deck: string[]; setDeck: (d: string[]) => void; onBack: () => void; onBattle: () => void }) {
+function DeckBuilder({ deck, setDeck, unlockedDeveloperIds, onBack, onBattle }: { deck: string[]; setDeck: (d: string[]) => void; unlockedDeveloperIds: string[]; onBack: () => void; onBattle: () => void }) {
   const [role, setRole] = useState("All");
   const counts = useMemo(() => Object.fromEntries(DEVELOPERS.map((d) => [d.id, deck.filter((x) => x === d.id).length])), [deck]);
-  const visible = role === "All" ? DEVELOPERS : DEVELOPERS.filter((d) => d.role === role);
+  const unlockedDevelopers = DEVELOPERS.filter((developer) => unlockedDeveloperIds.includes(developer.id));
+  const visible = role === "All" ? unlockedDevelopers : unlockedDevelopers.filter((d) => d.role === role);
   const add = (id: string) => { if (deck.length < 20 && counts[id] < 3) setDeck([...deck, id]); };
   const remove = (id: string) => { const at = deck.lastIndexOf(id); if (at >= 0) setDeck(deck.filter((_, i) => i !== at)); };
 
@@ -205,7 +255,7 @@ function DeckBuilder({ deck, setDeck, onBack, onBattle }: { deck: string[]; setD
       <div className="deck-cap"><span>DECK CAPACITY</span><b className={deck.length === 20 ? "full" : ""}>{deck.length}<small>/20</small></b><Meter value={deck.length} max={20} /></div>
     </div>
     <div className="deck-layout">
-      <div className="collection"><div className="section-label"><span>DEVELOPER POOL</span><small>Click a card to recruit · max 3 copies</small></div><div className="card-grid">{visible.map((dev, i) => <div className="card-wrap" style={{ animationDelay: `${i * 45}ms` }} key={dev.id}><DevCard dev={dev} count={counts[dev.id]} onClick={() => add(dev.id)} disabled={deck.length >= 20 || counts[dev.id] >= 3} /></div>)}</div></div>
+      <div className="collection"><div className="section-label"><span>DEVELOPER POOL · {unlockedDevelopers.length}/{DEVELOPERS.length} UNLOCKED</span><small>Win campaign battles to expand the pool · max 3 copies</small></div><div className="card-grid">{visible.map((dev, i) => <div className="card-wrap" style={{ animationDelay: `${i * 45}ms` }} key={dev.id}><DevCard dev={dev} count={counts[dev.id]} onClick={() => add(dev.id)} disabled={deck.length >= 20 || counts[dev.id] >= 3} /></div>)}</div></div>
       <aside className="deck-stack-panel">
         <div className="stack-title"><Layers3 size={17} /><div><b>YOUR DECK</b><small>{new Set(deck).size} unique developers</small></div><button onClick={() => setDeck([])}>Clear</button></div>
         <div className="deck-list">{DEVELOPERS.filter((d) => counts[d.id]).map((dev) => <div className="deck-list-item" key={dev.id} style={{ "--accent": dev.accent } as React.CSSProperties}><img src={dev.art} alt="" /><span><b>{dev.name}</b><small>{dev.role}</small></span><div><button onClick={() => remove(dev.id)}><Minus size={13} /></button><strong>{counts[dev.id]}</strong><button onClick={() => add(dev.id)} disabled={deck.length >= 20 || counts[dev.id] >= 3}><Plus size={13} /></button></div></div>)}</div>
@@ -216,12 +266,12 @@ function DeckBuilder({ deck, setDeck, onBack, onBattle }: { deck: string[]; setD
   </section>;
 }
 
-function Battle({ deck, opponent, onExit }: { deck: string[]; opponent: CampaignLead; onExit: () => void }) {
+function Battle({ deck, opponent, unlockedDeveloperIds, onUnlockReward, onExit }: { deck: string[]; opponent: CampaignLead; unlockedDeveloperIds: string[]; onUnlockReward: (developerId: string) => void; onExit: () => void }) {
   const shuffledDeck = useRef([...deck].sort(() => Math.random() - .5));
   const [drawIndex, setDrawIndex] = useState(5);
   const [hand, setHand] = useState<string[]>(shuffledDeck.current.slice(0, 5));
   const [playerSlots, setPlayerSlots] = useState<BoardSlot[]>(emptySlots());
-  const [enemySlots, setEnemySlots] = useState<BoardSlot[]>(() => createEnemySlots(opponent));
+  const [enemySlots, setEnemySlots] = useState<BoardSlot[]>(emptyEnemyOffice);
   const [deckOpen, setDeckOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuHelpOpen, setMenuHelpOpen] = useState(false);
@@ -253,6 +303,10 @@ function Battle({ deck, opponent, onExit }: { deck: string[]; opponent: Campaign
   const [eventTone, setEventTone] = useState<"neutral" | "good" | "bad">("neutral");
   const [brags, setBrags] = useState<number[]>([]);
   const [winner, setWinner] = useState<Owner | null>(null);
+  const [initiativeWinner, setInitiativeWinner] = useState<Owner | null>(null);
+  const [initiativeToss, setInitiativeToss] = useState<InitiativeTossState | null>(null);
+  const [deploymentTurn, setDeploymentTurn] = useState<Owner | null>(null);
+  const [battleReward, setBattleReward] = useState<Developer | null>(null);
   const [seqActive, setSeqActive] = useState<number | null>(null);
   const [highlight, setHighlight] = useState<ActionHighlight | null>(null);
   const [actionStage, setActionStage] = useState<ActionStage | null>(null);
@@ -265,6 +319,8 @@ function Battle({ deck, opponent, onExit }: { deck: string[]; opponent: Campaign
   const cameraHoldInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const soundEnabled = useRef(true);
   const lastDrawSoundKey = useRef<number | null>(null);
+  const openingRun = useRef(0);
+  const rewardGranted = useRef(false);
   const areaPointerDrag = useRef<{ area: AreaType; pointerId: number; startX: number; startY: number; dragging: boolean; slotIndex: number | null } | null>(null);
   const suppressAreaClick = useRef(false);
   const developerPointerDrag = useRef<{ handIndex: number; devId: string; pointerId: number; startX: number; startY: number; dragging: boolean; desk: { slotIndex: number; position: number } | null } | null>(null);
@@ -274,6 +330,12 @@ function Battle({ deck, opponent, onExit }: { deck: string[]; opponent: Campaign
   const placed = playerSlots.flatMap((s) => s.developers);
   const configuredAreas = playerSlots.filter((slot) => slot.type).length;
   const setupReady = configuredAreas === 4;
+  const canDeployOpeningCard = hand.some((devId) => playerSlots.some((slot) => {
+    if (!slot.type || (devId === "aiden" && slot.type === "open")) return false;
+    const capacity = slot.type === "open" ? 4 : 2;
+    return slot.developers.length < capacity;
+  }));
+  const playerDeploymentReady = !canDeployOpeningCard;
   const deckRemaining = Math.max(0, shuffledDeck.current.length - drawIndex);
   const plannedActions = Object.values(plan).filter((action) => action !== "skip").length;
   const playBattleSound = (effect: SoundEffect) => playSfx(effect, soundEnabled.current);
@@ -413,7 +475,8 @@ function Battle({ deck, opponent, onExit }: { deck: string[]; opponent: Campaign
   const endDeveloperDrag = () => { developerPointerDrag.current = null; setDraggedDeveloper(null); setDeveloperDragPointer(null); setHoveredDesk(null); };
 
   const startDeveloperPointer = (event: React.PointerEvent<HTMLDivElement>, handIndex: number, devId: string) => {
-    if (phase !== "plan" || (event.pointerType === "mouse" && event.button !== 0)) return;
+    const canDeploy = phase === "plan" || (phase === "deploy" && deploymentTurn === "player");
+    if (!canDeploy || (event.pointerType === "mouse" && event.button !== 0)) return;
     developerPointerDrag.current = { handIndex, devId, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, dragging: false, desk: null };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -456,19 +519,80 @@ function Battle({ deck, opponent, onExit }: { deck: string[]; opponent: Campaign
     setInspectedDeveloper({ devId, handIndex });
   };
 
-  const finishSetup = () => {
+  const beginPlanning = () => {
+    setDeploymentTurn(null);
+    setPhase("plan");
+    setProjectNudge(null);
+    setEvent(`${initiativeWinner === "enemy" ? opponent.teamName : "Your team"} has opening priority. Choose a project and plan Sprint 01.`);
+    setEventTone("good");
+    showAnnouncement("SPRINT PLANNING", `${initiativeWinner === "enemy" ? opponent.teamName : "Your team"} acts first in every sequence`, initiativeWinner === "enemy" ? "pink" : "cyan");
+  };
+
+  const beginPlayerDeployment = () => {
+    setPhase("deploy");
+    setDeploymentTurn("player");
+    setEvent("Your deployment turn. Place every developer who has an available desk.");
+    setEventTone("neutral");
+    showAnnouncement("YOUR DEPLOYMENT", "Drag your opening hand onto exact desks", "cyan");
+  };
+
+  const deployEnemyTeam = async (runId: number) => {
+    setPhase("deploy");
+    setDeploymentTurn("enemy");
+    setEvent(`${opponent.teamName} won this deployment turn.`);
+    setEventTone("bad");
+    showAnnouncement("RIVAL DEPLOYMENT", `${opponent.name}'s signature team is taking the board`, "pink");
+    await wait(850);
+    for (const placedDev of enemyDeployment(opponent)) {
+      if (openingRun.current !== runId) return false;
+      setEnemySlots((slots) => slots.map((slot, index) => index === placedDev.slot ? { ...slot, developers: [...slot.developers, placedDev] } : slot));
+      setEvent(`${getDeveloper(placedDev.devId).name} joined ${opponent.teamName}.`);
+      playBattleSound("cardPlace");
+      await wait(520);
+    }
+    return openingRun.current === runId;
+  };
+
+  const finishSetup = async () => {
     if (!setupReady) return;
+    const runId = ++openingRun.current;
     playBattleSound("uiConfirm");
     setSelectedArea(null); endAreaDrag();
     setProjectNudge(null);
-    setPhase("plan");
-    setEvent("Office locked in. Deploy developers and choose your first project.");
-    setEventTone("good");
-    showAnnouncement("YOUR TURN", "Sprint 01 · Deploy your team and choose a project", "cyan");
+    setPhase("initiative");
+    setAnnouncement(null);
+    const first = Math.random() < .5 ? "player" : "enemy";
+    setInitiativeWinner(first);
+    setInitiativeToss({ winner: first, stage: "spinning" });
+    setEvent("Routing the opening cursor…");
+    setEventTone("neutral");
+    playBattleSound("wheelSpin");
+    await wait(2700);
+    if (openingRun.current !== runId) return;
+    setInitiativeToss({ winner: first, stage: "result" });
+    setEvent(first === "player" ? "The cursor chose you. Deploy first." : `The cursor chose ${opponent.teamName}. Rival deploys first.`);
+    setEventTone(first === "player" ? "good" : "bad");
+    playBattleSound("needleLand");
+    await wait(1250);
+    if (openingRun.current !== runId) return;
+    setInitiativeToss(null);
+    if (first === "player") beginPlayerDeployment();
+    else if (await deployEnemyTeam(runId)) beginPlayerDeployment();
+  };
+
+  const finishPlayerDeployment = async () => {
+    if (phase !== "deploy" || deploymentTurn !== "player" || !playerDeploymentReady) return;
+    const runId = openingRun.current;
+    playBattleSound("uiConfirm");
+    setDeploymentTurn(null);
+    if (initiativeWinner === "player") {
+      if (await deployEnemyTeam(runId)) beginPlanning();
+    } else beginPlanning();
   };
 
   const deploy = (handIndex: number, slotIndex: number, position: number) => {
-    if (phase !== "plan" || !hand[handIndex]) return;
+    const canDeploy = phase === "plan" || (phase === "deploy" && deploymentTurn === "player");
+    if (!canDeploy || !hand[handIndex]) return;
     const dev = getDeveloper(hand[handIndex]);
     const slot = playerSlots[slotIndex];
     if (!slot.type) { setEvent("Install an office card in that bay before deploying a developer."); setEventTone("bad"); return; }
@@ -573,6 +697,17 @@ function Battle({ deck, opponent, onExit }: { deck: string[]; opponent: Campaign
     if (dev.id === "bryson" && coworkers.includes("chad")) chance += 10;
     if (coworkers.includes("irene") && ["seulgi", "wendy", "joy", "yeri"].includes(dev.id) && slots[instance.slot].type === "open") chance += 8;
     return clamp(chance, 5, 96);
+  };
+
+  const grantVictoryReward = () => {
+    if (rewardGranted.current) return;
+    rewardGranted.current = true;
+    const lockedRewards = opponent.rewards.filter((developerId) => !unlockedDeveloperIds.includes(developerId));
+    if (!lockedRewards.length) return;
+    const developerId = lockedRewards[Math.floor(Math.random() * lockedRewards.length)];
+    const reward = getDeveloper(developerId);
+    setBattleReward(reward);
+    onUnlockReward(developerId);
   };
 
   const advanceTurn = (ps: ProjectState[], aiProjectId: string | undefined) => {
@@ -752,52 +887,63 @@ function Battle({ deck, opponent, onExit }: { deck: string[]; opponent: Campaign
       const completedAtSequenceStart = new Map(ps.map((project) => [project.id, new Set(project.tasks.filter((task) => project.tasksState[task.id].completed).map((task) => task.id))]));
       setSeqActive(seq);
       setActionStage(null); setHighlight(null);
-      showAnnouncement(`SEQUENCE ${String(seq).padStart(2, "0")}`, `Ticket lane ${seq} of ${SEQUENCE_COUNT} · your team acts first`, "cyan");
+      const firstActor = initiativeWinner ?? "player";
+      showAnnouncement(`SEQUENCE ${String(seq).padStart(2, "0")}`, `Ticket lane ${seq} of ${SEQUENCE_COUNT} · ${firstActor === "player" ? "your team" : opponent.teamName} acts first`, firstActor === "player" ? "cyan" : "pink");
       playBattleSound("sequenceStart");
       await wait(1650);
       setAnnouncement(null);
       await wait(180);
 
-      for (const snapshot of pSlots.flatMap((slot) => slot.developers)) {
-        const actor = pSlots.flatMap((slot) => slot.developers).find((candidate) => candidate.instanceId === snapshot.instanceId);
-        if (!actor) continue;
-        const action = plan[`${actor.instanceId}-${seq}`] ?? "skip";
-        const pp = ps.find((project) => project.id === pProjectId && !project.completed);
-        if (action.startsWith("work:")) {
-          const taskId = action.slice(5);
-          const task = pp?.tasks.find((candidate) => candidate.id === taskId);
-          if (!pp || !task) await playSkip("player", actor, seq, "Project already reached MVP — this ticket was auto-skipped.", "project-complete");
-          else if (pp.tasksState[taskId].completed) await playSkip("player", actor, seq, `${task.title} was already shipped by an earlier action — this ticket was auto-skipped.`, "task-complete", task);
-          else await playWork("player", actor, pp, task, seq, completedAtSequenceStart.get(pp.id) ?? new Set<string>());
-        } else if (action.startsWith("taunt:")) {
-          await playTaunt("player", actor, seq, action.slice(6));
-        } else {
-          await playSkip("player", actor, seq, "SKIP · ticket left unused.");
-        }
-        if (pSan <= 0 || eSan <= 0) break;
-      }
-      if (pSan <= 0 || eSan <= 0) break;
-
-      for (const snapshot of eSlots.flatMap((slot) => slot.developers)) {
-        const actor = eSlots.flatMap((slot) => slot.developers).find((candidate) => candidate.instanceId === snapshot.instanceId);
-        if (!actor) continue;
-        const dev = getDeveloper(actor.devId);
-        const ap = ps.find((project) => project.id === aiProjectId && !project.completed);
-        if (Math.random() < .20) {
-          const targetSlot = pSlots[actor.slot];
-          const target = targetSlot.type === "open" && targetSlot.developers.length ? targetSlot.developers[Math.floor(Math.random() * targetSlot.developers.length)].instanceId : "player-lead";
-          await playTaunt("enemy", actor, seq, target);
-        } else if (!ap || Math.random() < .18) {
-          await playSkip("enemy", actor, seq, "SKIP · rival held this ticket.");
-        } else {
-          const tasks = ap.tasks.filter((task) => !ap.tasksState[task.id].completed);
-          if (!tasks.length) await playSkip("enemy", actor, seq, "SKIP · no unfinished requirements.");
-          else {
-            const preferred = tasks.filter((task) => ROLE_CHANCES[dev.role][task.type] >= 0);
-            const pool = preferred.length && Math.random() < .72 ? preferred : tasks;
-            await playWork("enemy", actor, ap, pool[Math.floor(Math.random() * pool.length)], seq, completedAtSequenceStart.get(ap.id) ?? new Set<string>());
+      const playPlayerSequence = async () => {
+        for (const snapshot of pSlots.flatMap((slot) => slot.developers)) {
+          const actor = pSlots.flatMap((slot) => slot.developers).find((candidate) => candidate.instanceId === snapshot.instanceId);
+          if (!actor) continue;
+          const action = plan[`${actor.instanceId}-${seq}`] ?? "skip";
+          const pp = ps.find((project) => project.id === pProjectId && !project.completed);
+          if (action.startsWith("work:")) {
+            const taskId = action.slice(5);
+            const task = pp?.tasks.find((candidate) => candidate.id === taskId);
+            if (!pp || !task) await playSkip("player", actor, seq, "Project already reached MVP — this ticket was auto-skipped.", "project-complete");
+            else if (pp.tasksState[taskId].completed) await playSkip("player", actor, seq, `${task.title} was already shipped by an earlier action — this ticket was auto-skipped.`, "task-complete", task);
+            else await playWork("player", actor, pp, task, seq, completedAtSequenceStart.get(pp.id) ?? new Set<string>());
+          } else if (action.startsWith("taunt:")) {
+            await playTaunt("player", actor, seq, action.slice(6));
+          } else {
+            await playSkip("player", actor, seq, "SKIP · ticket left unused.");
           }
+          if (pSan <= 0 || eSan <= 0) break;
         }
+      };
+
+      const playEnemySequence = async () => {
+        for (const snapshot of eSlots.flatMap((slot) => slot.developers)) {
+          const actor = eSlots.flatMap((slot) => slot.developers).find((candidate) => candidate.instanceId === snapshot.instanceId);
+          if (!actor) continue;
+          const dev = getDeveloper(actor.devId);
+          const ap = ps.find((project) => project.id === aiProjectId && !project.completed);
+          if (Math.random() < .20) {
+            const targetSlot = pSlots[actor.slot];
+            const target = targetSlot.type === "open" && targetSlot.developers.length ? targetSlot.developers[Math.floor(Math.random() * targetSlot.developers.length)].instanceId : "player-lead";
+            await playTaunt("enemy", actor, seq, target);
+          } else if (!ap || Math.random() < .18) {
+            await playSkip("enemy", actor, seq, "SKIP · rival held this ticket.");
+          } else {
+            const tasks = ap.tasks.filter((task) => !ap.tasksState[task.id].completed);
+            if (!tasks.length) await playSkip("enemy", actor, seq, "SKIP · no unfinished requirements.");
+            else {
+              const preferred = tasks.filter((task) => ROLE_CHANCES[dev.role][task.type] >= 0);
+              const pool = preferred.length && Math.random() < .72 ? preferred : tasks;
+              await playWork("enemy", actor, ap, pool[Math.floor(Math.random() * pool.length)], seq, completedAtSequenceStart.get(ap.id) ?? new Set<string>());
+            }
+          }
+          if (pSan <= 0 || eSan <= 0) break;
+        }
+      };
+
+      const sequenceOrder: Owner[] = firstActor === "player" ? ["player", "enemy"] : ["enemy", "player"];
+      for (const owner of sequenceOrder) {
+        if (owner === "player") await playPlayerSequence();
+        else await playEnemySequence();
         if (pSan <= 0 || eSan <= 0) break;
       }
       if (pSan <= 0 || eSan <= 0) break;
@@ -805,6 +951,7 @@ function Battle({ deck, opponent, onExit }: { deck: string[]; opponent: Campaign
     setActionStage(null); setHighlight(null);
     if (pSan <= 0 || eSan <= 0) {
       const matchWinner = pSan > 0 ? "player" : "enemy";
+      if (matchWinner === "player") grantVictoryReward();
       setWinner(matchWinner); setPhase("gameover"); playBattleSound(matchWinner === "player" ? "victory" : "defeat"); return;
     }
     setSeqActive(null);
@@ -816,7 +963,7 @@ function Battle({ deck, opponent, onExit }: { deck: string[]; opponent: Campaign
     const hit = brags[0]; const remaining = brags.slice(1); const nextEnemy = Math.max(0, enemySanity - hit);
     setEnemySanity(nextEnemy); setBrags(remaining); setEvent(`You shipped it and bragged for ${hit} sanity damage!`); setEventTone("good");
     playBattleSound("brag");
-    if (nextEnemy <= 0) { setWinner("player"); setPhase("gameover"); setTimeout(() => playBattleSound("victory"), 650); return; }
+    if (nextEnemy <= 0) { grantVictoryReward(); setWinner("player"); setPhase("gameover"); setTimeout(() => playBattleSound("victory"), 650); return; }
     // One brag per turn; extra brags remain banked.
     setTimeout(() => advanceTurn(projects, projects.find((p) => p.claimedBy === "enemy" && !p.completed)?.id), 500);
   };
@@ -850,27 +997,29 @@ function Battle({ deck, opponent, onExit }: { deck: string[]; opponent: Campaign
   };
 
   const resetBattle = () => {
+    openingRun.current += 1;
+    rewardGranted.current = false;
     stopAllSfx();
     playBattleSound("uiConfirm");
     shuffledDeck.current = [...deck].sort(() => Math.random() - .5);
     setDrawIndex(5);
     setHand(shuffledDeck.current.slice(0, 5));
     setPlayerSlots(emptySlots());
-    setEnemySlots(createEnemySlots(opponent));
+    setEnemySlots(emptyEnemyOffice());
     setDeckOpen(false); setMenuOpen(false); setMenuHelpOpen(false); setUnemployment([]); setSelectedArea(null); endAreaDrag(); endDeveloperDrag(); setLastAreaInstall(null); setTurnDrawEvent(null); setHandArrival(null);
     const nextProjects = freshBattleProjects(opponent);
     setProjects(nextProjects);
     setPlayerSanity(30); setEnemySanity(30); setTurn(1); setCameraX(0); setCameraTilt(52); setCameraZoom(1);
     setPlannerOpen(false); setSprintConfirmOpen(false); setProjectModalOpen(false); setProjectNudge(null); setBragNudge(null); setPlan({}); setPhase("setup"); setBrags([]);
-    setWinner(null); setSeqActive(null); setHighlight(null); setActionStage(null); setTauntTargetRequest(null); setInspectedDeveloper(null); setEventTone("neutral");
+    setWinner(null); setInitiativeWinner(null); setInitiativeToss(null); setDeploymentTurn(null); setBattleReward(null); setSeqActive(null); setHighlight(null); setActionStage(null); setTauntTargetRequest(null); setInspectedDeveloper(null); setEventTone("neutral");
     setAnnouncement({ key: Date.now(), title: "OFFICE SETUP", subtitle: "Build your workspace before the first sprint", tone: "lime" });
     setEvent("Set up your office before the first sprint begins.");
   };
 
-  return <main className={`battle-screen ${phase === "setup" ? "setup-active" : ""}`}>
+  return <main className={`battle-screen ${phase === "setup" ? "setup-active" : ""} ${phase === "initiative" || phase === "deploy" ? "opening-active" : ""}`}>
     <div className="battle-hud">
       <div className="hud-stack player-hud-stack"><PlayerHud owner="player" name="YOU // LOCALHOST" sanity={playerSanity} max={30} project={playerProject} targeted={highlight?.targetId === "player-lead"} /></div>
-      <div className={`turn-pill ${phase === "setup" ? "setup" : ""}`}><span>{phase === "setup" ? "OFFICE" : "SPRINT"}</span><b>{phase === "setup" ? `${configuredAreas}/4` : String(turn).padStart(2, "0")}</b><small>{phase === "setup" ? "LAYOUT SETUP" : phase === "resolving" ? `SEQUENCE ${seqActive ?? 1}/${SEQUENCE_COUNT}` : phase === "brag" ? "BRAG WINDOW" : "PLANNING"}</small></div>
+      <div className={`turn-pill ${phase === "setup" ? "setup" : phase === "initiative" ? "initiative" : phase === "deploy" ? "deployment" : ""}`}><span>{phase === "setup" ? "OFFICE" : phase === "initiative" ? "PRIORITY" : phase === "deploy" ? "DEPLOY" : "SPRINT"}</span><b>{phase === "setup" ? `${configuredAreas}/4` : phase === "initiative" ? "50/50" : phase === "deploy" ? String(deploymentTurn === "enemy" ? enemySlots.flatMap((slot) => slot.developers).length : placed.length).padStart(2, "0") : String(turn).padStart(2, "0")}</b><small>{phase === "setup" ? "LAYOUT SETUP" : phase === "initiative" ? "CURSOR TOSS" : phase === "deploy" ? `${deploymentTurn === "enemy" ? "RIVAL" : "YOUR"} TEAM` : phase === "resolving" ? `SEQUENCE ${seqActive ?? 1}/${SEQUENCE_COUNT}` : phase === "brag" ? "BRAG WINDOW" : "PLANNING"}</small></div>
       <div className="hud-stack enemy-hud-stack">
         <PlayerHud owner="enemy" name={opponent.teamName} avatarText={opponent.initials} sanity={enemySanity} max={30} project={enemyProject} targeted={highlight?.targetId === "enemy-lead"} />
         <button type="button" className={`hud-brag-button ${brags.length ? "armed" : "locked"} ${phase === "brag" ? "ready" : ""}`} onClick={tryUseBrag} aria-label={brags.length ? `Use Brag. ${brags.length} available.` : "Brag locked. Complete a project first."}>
@@ -881,7 +1030,7 @@ function Battle({ deck, opponent, onExit }: { deck: string[]; opponent: Campaign
       </div>
     </div>
 
-    {phase === "setup" ? <div className="setup-console-spacer" aria-hidden="true" /> : <div className="project-console">
+    {phase === "setup" || phase === "initiative" || phase === "deploy" ? <div className="setup-console-spacer" aria-hidden="true" /> : <div className="project-console">
       {playerProject ? <button className={`active-project-card ${bragNudge ? "needs-attention" : ""}`} onClick={() => { setBragNudge(null); setProjectModalOpen(true); }} style={{ "--project": playerProject.accent, "--project-progress": `${clamp((playerProject.progress / playerProject.mvp) * 100, 0, 100)}%` } as React.CSSProperties}>
         <span className="project-icon"><BriefcaseBusiness size={16} /></span><span className="active-project-name"><b>{playerProject.name}</b><small>{playerProject.progress}/{playerProject.mvp} MVP</small></span><em>{playerProject.tasks.filter((t) => playerProject.tasksState[t.id].completed).length}/{playerProject.tasks.length} TASKS</em><ChevronRight size={14} />
       </button> : <button className={`select-project-button ${projectNudge || bragNudge ? "needs-attention" : ""}`} onClick={openProjectPicker} disabled={phase !== "plan"}><Plus size={16} /><span><b>Select a project</b><small>Review scope before committing</small></span><ChevronRight size={16} /></button>}
@@ -905,7 +1054,7 @@ function Battle({ deck, opponent, onExit }: { deck: string[]; opponent: Campaign
         <button aria-label="Tilt board down" title="Hold to tilt down" {...holdProps(() => setCameraTilt((tilt) => clamp(tilt + 1.25, 38, 68)))}><ChevronDown /></button>
         <div className="zoom-controls"><button aria-label="Zoom board out" title="Hold to zoom out" {...holdProps(() => setCameraZoom((zoom) => clamp(zoom - .025, .72, 1.3)))}><ZoomOut /></button><span><b>{Math.round(cameraZoom * 100)}%</b><small>ZOOM</small></span><button aria-label="Zoom board in" title="Hold to zoom in" {...holdProps(() => setCameraZoom((zoom) => clamp(zoom + .025, .72, 1.3)))}><ZoomIn /></button></div>
       </div>
-      {announcement && <div key={announcement.key} className={`stage-announcement ${announcement.tone}`}><small>{phase === "setup" ? "PRE-BATTLE" : "ACTIVE PLAYER"}</small><b>{announcement.title}</b><span>{announcement.subtitle}</span></div>}
+      {announcement && <div key={announcement.key} className={`stage-announcement ${announcement.tone}`}><small>{phase === "setup" ? "PRE-BATTLE" : phase === "deploy" ? "OPENING DEPLOYMENT" : "ACTIVE PLAYER"}</small><b>{announcement.title}</b><span>{announcement.subtitle}</span></div>}
       {bragNudge && <div key={bragNudge} className="project-required-warning brag-required-warning" role="status" aria-live="polite"><img src="/ui/brag-burst.png" alt="" /><span><b>COMPLETE A PROJECT FIRST</b><small>{phase === "setup" ? "Finish office setup, then claim and complete a project." : playerProject ? `Reach ${playerProject.name}'s MVP to unlock a Brag.` : "Claim work from the shared backlog and complete its MVP."}</small></span></div>}
       {phase === "plan" && projectNudge && !bragNudge && <div key={projectNudge} className="project-required-warning" role="status" aria-live="polite"><AlertTriangle size={18} /><span><b>SELECT A PROJECT FIRST</b><small>Claim work from the shared backlog, then plan your sprint.</small></span></div>}
       {phase === "plan" && tauntTargetRequest && <div className="taunt-target-prompt" role="status" aria-live="polite"><AlertTriangle size={20} /><span><b>CHOOSE A TAUNT TARGET</b><small>{getDeveloper(tauntTargetRequest.placed.devId).name} can hit rival Work Area {tauntTargetRequest.placed.slot + 1}, directly ahead. Select a highlighted developer; cubicles redirect the hit to the rival lead.</small></span><button onClick={cancelTauntTarget}>Cancel</button></div>}
@@ -917,13 +1066,17 @@ function Battle({ deck, opponent, onExit }: { deck: string[]; opponent: Campaign
       {turnDrawEvent && <TurnDrawEventView draw={turnDrawEvent} />}
     </div>
 
-    {phase !== "setup" && <div className="battle-dock"><div className="bottom-command-panel">
+    {phase === "initiative" && initiativeToss && <InitiativeToss state={initiativeToss} opponent={opponent} />}
+
+    {phase !== "setup" && phase !== "initiative" && <div className={`battle-dock ${phase === "deploy" ? "deployment-mode" : ""}`}><div className="bottom-command-panel">
         <div className="pile-rack">
           <DrawPile remaining={deckRemaining} total={shuffledDeck.current.length} onOpen={() => setDeckOpen(true)} />
           <UnemploymentPile developers={unemployment} />
         </div>
-        <div className="hand-zone"><div className="hand-label"><span><Hand size={15} /> DEVELOPER HAND</span><small>Click to inspect · drag onto an exact desk</small></div><div className="hand-cards fanned">{hand.map((id, i) => { const dev = getDeveloper(id); const offset = i - (hand.length - 1) / 2; const arriving = !!handArrival && i >= hand.length - handArrival.count; return <div className={`hand-drag-card ${draggedDeveloper?.handIndex === i ? "dragging" : ""} ${arriving ? "draw-arrival" : ""}`} style={{ "--fan-angle": `${offset * 3.5}deg`, "--fan-y": `${Math.abs(offset) * 3}px`, zIndex: i + 1 } as React.CSSProperties} onClick={() => inspectHandDeveloper(id, i)} onPointerDown={(event) => startDeveloperPointer(event, i, id)} onPointerMove={moveDeveloperPointer} onPointerUp={finishDeveloperPointer} onPointerCancel={cancelDeveloperPointer} key={`${id}-${i}`}><DevCard dev={dev} compact /></div>; })}{Array.from({ length: Math.max(0, 5 - hand.length) }).map((_, i) => <div className="empty-hand" key={i}><Code2 /></div>)}</div></div>
+        <div className="hand-zone"><div className="hand-label"><span><Hand size={15} /> {phase === "deploy" ? "OPENING HAND" : "DEVELOPER HAND"}</span><small>{phase === "deploy" && deploymentTurn === "enemy" ? "Rival deployment in progress" : "Click to inspect · drag onto an exact desk"}</small></div><div className="hand-cards fanned">{hand.map((id, i) => { const dev = getDeveloper(id); const offset = i - (hand.length - 1) / 2; const arriving = !!handArrival && i >= hand.length - handArrival.count; return <div className={`hand-drag-card ${draggedDeveloper?.handIndex === i ? "dragging" : ""} ${arriving ? "draw-arrival" : ""}`} style={{ "--fan-angle": `${offset * 3.5}deg`, "--fan-y": `${Math.abs(offset) * 3}px`, zIndex: i + 1 } as React.CSSProperties} onClick={() => inspectHandDeveloper(id, i)} onPointerDown={(event) => startDeveloperPointer(event, i, id)} onPointerMove={moveDeveloperPointer} onPointerUp={finishDeveloperPointer} onPointerCancel={cancelDeveloperPointer} key={`${id}-${i}`}><DevCard dev={dev} compact /></div>; })}{Array.from({ length: Math.max(0, 5 - hand.length) }).map((_, i) => <div className="empty-hand" key={i}><Code2 /></div>)}</div></div>
         <div className="battle-actions">
+          {phase === "deploy" && deploymentTurn === "player" && <button className="deployment-ready-button" onClick={finishPlayerDeployment} disabled={!playerDeploymentReady}><Check size={19} /><span><b>LOCK TEAM</b><small>{playerDeploymentReady ? placed.length ? `${placed.length} deployed · continue` : "No valid desks · continue" : `${hand.length} cards still need desks`}</small></span></button>}
+          {phase === "deploy" && deploymentTurn === "enemy" && <div className="resolving-button rival-deploying"><span className="spinner" /><div><b>RIVAL DEPLOYING</b><small>Cards are dealt one at a time</small></div></div>}
           {phase === "plan" && <div className="sprint-controls"><button className="sprint-button" onClick={openSprintConfirmation} aria-label="Run sprint and end turn"><img src="/ui/sprint-button.png" alt="" /><span>SPRINT!</span></button><button className="plan-queue-button" onClick={openSprintPlanner}><Ticket size={15} /><span>PLAN</span><em>{plannedActions}</em></button></div>}
           {phase === "resolving" && <div className="resolving-button"><span className="spinner" /><div><b>SPRINT IN PROGRESS</b><small>Actions resolve in sequence</small></div></div>}
           {phase === "brag" && <div className="brag-window-actions"><span>BRAG READY ABOVE</span><button className="skip-button" onClick={skipBrag}>Bank for later</button></div>}
@@ -931,7 +1084,7 @@ function Battle({ deck, opponent, onExit }: { deck: string[]; opponent: Campaign
     </div></div>}
 
     {phase === "setup" && draggedArea && dragPointer && <div aria-hidden="true" className={`setup-drag-ghost ${draggedArea}`} style={{ left: dragPointer.x, top: dragPointer.y }}><img src={draggedArea === "open" ? "/areas/open-space.png" : "/areas/cubicles.png"} alt="" /><span>{draggedArea === "open" ? <DoorOpen size={15} /> : <LockKeyhole size={15} />}<b>{draggedArea === "open" ? "OPEN SPACE" : "CUBICLES"}</b></span><em>DROP TO INSTALL</em></div>}
-    {phase === "plan" && draggedDeveloper && developerDragPointer && (() => { const dev = getDeveloper(draggedDeveloper.devId); return <div aria-hidden="true" className="developer-drag-ghost" style={{ left: developerDragPointer.x, top: developerDragPointer.y, "--accent": dev.accent } as React.CSSProperties}><img src={dev.art} alt="" /><span><b>{dev.name}</b><small>{dev.role}</small></span><em>DROP ON A DESK</em></div>; })()}
+    {(phase === "plan" || phase === "deploy") && draggedDeveloper && developerDragPointer && (() => { const dev = getDeveloper(draggedDeveloper.devId); return <div aria-hidden="true" className="developer-drag-ghost" style={{ left: developerDragPointer.x, top: developerDragPointer.y, "--accent": dev.accent } as React.CSSProperties}><img src={dev.art} alt="" /><span><b>{dev.name}</b><small>{dev.role}</small></span><em>DROP ON A DESK</em></div>; })()}
 
     {plannerOpen && <Planner developers={placed} opponents={enemySlots.flatMap((slot) => slot.developers)} project={playerProject} plan={plan} setPlan={setPlan} onRequestTaunt={requestTauntTarget} onClose={() => setPlannerOpen(false)} onSave={() => setPlannerOpen(false)} />}
     {sprintConfirmOpen && <SprintConfirmation turn={turn} project={playerProject} plannedActions={plannedActions} onCancel={() => setSprintConfirmOpen(false)} onConfirm={resolveTurn} />}
@@ -949,8 +1102,24 @@ function Battle({ deck, opponent, onExit }: { deck: string[]; opponent: Campaign
       </div>}
       <footer><Settings size={14} /> LOCAL SESSION · SINGLEPLAYER MVP</footer>
     </section></div>}
-    {phase === "gameover" && <div className="gameover-overlay"><div className={`gameover-card ${winner}`}><div className="burst" /><Trophy size={54} /><span>{winner === "player" ? "SHIP HAPPENS" : "PROD IS DOWN"}</span><h2>{winner === "player" ? "You shipped it." : "You burned out."}</h2><p>{winner === "player" ? "The rival lead has no sanity left. Take the win." : "Your sanity hit zero. The backlog wins this round."}</p><div><button className="primary-cta small" onClick={resetBattle}><RotateCcw size={17} /> Rematch</button><button className="secondary-cta" onClick={onExit}>Main menu</button></div></div></div>}
+    {phase === "gameover" && <div className="gameover-overlay"><div className={`gameover-card ${winner} ${battleReward ? "with-reward" : ""}`}><div className="burst" /><Trophy size={54} /><span>{winner === "player" ? "SHIP HAPPENS" : "PROD IS DOWN"}</span><h2>{winner === "player" ? "You shipped it." : "You burned out."}</h2><p>{winner === "player" ? battleReward ? `${opponent.teamName} dropped a new developer card.` : "The rival lead has no sanity left. This reward cache is already complete." : "Your sanity hit zero. The backlog wins this round."}</p>{battleReward && <div className="victory-reward" style={{ "--accent": battleReward.accent } as React.CSSProperties}><img src={battleReward.art} alt={battleReward.name} /><span><small>NEW DEVELOPER UNLOCKED</small><b>{battleReward.name}</b><em>{battleReward.role} · {battleReward.traitLabel}</em><strong>Added to your collection{deck.length < 20 ? " and deck" : ""}</strong></span></div>}<div><button className="primary-cta small" onClick={resetBattle}><RotateCcw size={17} /> Rematch</button><button className="secondary-cta" onClick={onExit}>Campaign</button></div></div></div>}
   </main>;
+}
+
+function InitiativeToss({ state, opponent }: { state: InitiativeTossState; opponent: CampaignLead }) {
+  const playerWon = state.winner === "player";
+  return <div className={`initiative-overlay ${state.stage} winner-${state.winner}`} role="status" aria-live="polite">
+    <section className="initiative-card">
+      <small>OPENING PRIORITY · 50 / 50</small>
+      <h2>{state.stage === "spinning" ? "Who deploys first?" : playerWon ? "You have priority." : `${opponent.name} has priority.`}</h2>
+      <div className="initiative-track">
+        <div className={`initiative-side player ${state.stage === "result" && playerWon ? "chosen" : ""}`}><span>YO</span><b>YOU</b><small>LOCALHOST</small></div>
+        <div className="initiative-rail"><i /><div className="initiative-cursor" style={{ "--cursor-end": playerWon ? "-145px" : "145px" } as React.CSSProperties}><img src="/ui/project-cursor.png" alt="" /></div></div>
+        <div className={`initiative-side enemy ${state.stage === "result" && !playerWon ? "chosen" : ""}`}><span>{opponent.initials}</span><b>{opponent.name}</b><small>{opponent.teamName}</small></div>
+      </div>
+      <p>{state.stage === "spinning" ? "The routing cursor is choosing an opening side…" : `${playerWon ? "Your team" : opponent.teamName} deploys first and acts first in each sequence.`}</p>
+    </section>
+  </div>;
 }
 
 function OfficeCard({ area, selected, dragging, onClick, onPointerDown, onPointerMove, onPointerUp, onPointerCancel }: { area: AreaType; selected: boolean; dragging: boolean; onClick: () => void; onPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => void; onPointerMove: (event: React.PointerEvent<HTMLButtonElement>) => void; onPointerUp: (event: React.PointerEvent<HTMLButtonElement>) => void; onPointerCancel: (event: React.PointerEvent<HTMLButtonElement>) => void }) {

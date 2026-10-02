@@ -22,6 +22,10 @@ Cubicles are insurance. They are ideal for fragile, high-output developers such 
 
 Stewart is a self-contained anchor. His high completion and sanity are valuable in a cubicle or alone in open space, but his Googoo Gaga Code penalty makes a crowded collaborative slot materially worse.
 
+## Opening priority
+
+The routing-cursor toss is an even 50/50 chance. The winner deploys first and resolves first in every sequence, trading hidden information for tempo: the second side sees the first deployment before placing its own team, while the first side gets the earliest chance to complete work or remove a vulnerable rival. Office layout is locked before the toss, so build a layout that can absorb either result.
+
 ## Sanity pressure
 
 Taunts are best when they remove a developer before that developer's next important work action. A low-sanity target in sequence 1 is more valuable than the same target in sequence 4. Taunts now lock a specific opposing developer during planning, so protecting or eliminating a crucial specialist is intentional rather than random. Fan is resistant to Frontend taunts, and Wendy's open-space team absorbs one point from each hit, so matchups matter.
